@@ -20,6 +20,36 @@ After cloning this repository, you'll need to:
 
 At this point, you should have a running application at `http://localhost:3000` that can interact with the backend, which is running locally at `http://localhost:8000`.
 
+## Developing
+
+### Collaboration
+
+To make sure that each of you is able to work independently and without causing code conflicts amongst each other, it is best to develop on **branches**. A GitHub branch is a copy of the codebase to which you can push your own individual changes without impacting anyone else's work.
+
+You should set up a new branch each time you want to try a new idea. Each branch should be connected to an issue, where you describe what you are going to do on the branch. For example, you might start by writing an issue describing a prompting strategy you want to try. Then you would check out a corresponding branch and implement that strategy. To set up a new branch:
+
+1. Create an issue using the Issues board in the repository. Take note of the issue number after creating it.
+2. Checkout a new branch named after the issue: `git checkout -b issue-[##]`, e.g. `git checkout -b issue-01`.
+3. Develop and push your changes to your branch, using `git add`, `git commit`, and `git push`.
+
+Typically in software projects, branches are creating with the intention of being merged back into main. Because the goal of these branches is to track experiments, we may instead choose to keep the branches and issues open for the lifetime of the project, as a record of experiments and to be able to easily flip between strategies by switching branches (via `git checkout [branch-name]`).
+
+### Asset Processing Project
+
+To make changes to the asset processing AI, you'll want to edit this file:
+
+- `api/api/infrastructure/services/asset_processor.py`
+
+There are two main methods in there to concern yourself with: `identify_terms`, and `synthesize_definition`. The docstrings explain more about what they do and how you should go about writing them.
+
+### Guide Experience Project
+
+To make changes to the guide AI, you'll want to edit this file:
+
+` api/api/infrastructure/services/guide_agent.py`
+
+There is one method in this file, `respond`, to focus on. The docstring explains more about what it does and how you should go about writing it.
+
 ## API Documentation
 
 You can view the API docs at `http://localhost:8000/docs`. Here you can also interact with the API and invoke endpoints directly, if you want.
