@@ -1,1 +1,38 @@
-db.json
+# base ignores
+**/.ipynb_checkpoints
+**/__pycache__
+**egg-info
+*.pyc
+.terraform/
+dist/
+poetry.lock
+.venv
+.python-version
+.vscode
+
+### react ###
+.DS_*
+*.log
+logs
+**/*.backup.*
+**/*.back.*
+node_modules
+bower_components
+*.sublime*
+psd
+thumb
+sketch
+.next
+.turbo
+
+# files / folders deliberately ignored
+/test*.py
+/.env
+/TODO
+/db.json
+
+# all instances of
+notebooks
+.aider*
+.env
+.vercel
