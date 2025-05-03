@@ -116,6 +116,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "litellm" },
     { name = "tinydb" },
+    { name = "tinydb-serialization" },
 ]
 
 [package.metadata]
@@ -124,6 +125,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "litellm", specifier = ">=1.67.6" },
     { name = "tinydb", specifier = ">=4.8.2" },
+    { name = "tinydb-serialization", specifier = ">=2.2.0" },
 ]
 
 [[package]]
@@ -1062,6 +1064,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a0/79/4af51e2bb214b6ea58f857c51183d92beba85b23f7ba61c983ab3de56c33/tinydb-4.8.2.tar.gz", hash = "sha256:f7dfc39b8d7fda7a1ca62a8dbb449ffd340a117c1206b68c50b1a481fb95181d", size = 32566 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/78/17/853354204e1ca022d6b7d011ca7f3206c4f8faa3cc743e92609b49c1d83f/tinydb-4.8.2-py3-none-any.whl", hash = "sha256:f97030ee5cbc91eeadd1d7af07ab0e48ceb04aa63d4a983adbaca4cba16e86c3", size = 24888 },
+]
+
+[[package]]
+name = "tinydb-serialization"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tinydb" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/87/af/d6bc960eadee5fb4406eaeceec4b7be6ef82676a5f3cf638fd56ecf39448/tinydb_serialization-2.2.0.tar.gz", hash = "sha256:b7e7f2b0cc17350438ba070eeb2f5fcb3a9949c5ff38476379450422de3f935f", size = 4912 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/cd/7e44162c9d3288517b7f19d13932112b6ecef079eec28f8d23997ebbe2c6/tinydb_serialization-2.2.0-py3-none-any.whl", hash = "sha256:02edeafd6560b811c8df3e39792a37dee68ac63978659c214eab593316c58253", size = 5736 },
 ]
 
 [[package]]

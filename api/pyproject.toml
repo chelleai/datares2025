@@ -12,6 +12,7 @@ dependencies = [
     "fastapi[standard]>=0.115.12",
     "litellm>=1.67.6",
     "tinydb>=4.8.2",
+    "tinydb-serialization>=2.2.0",
 ]
 
 [project.scripts]

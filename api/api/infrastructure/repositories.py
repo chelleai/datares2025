@@ -1,6 +1,6 @@
 from typing import Self
 
-from tinydb import Query
+from tinydb import Query, where
 
 from api.domain.aggregates.asset import Asset
 from api.domain.aggregates.guide import Guide
@@ -28,7 +28,11 @@ class AssetRepository(IAssetRepository):
         return [Asset.model_validate(asset) for asset in assets]
 
     async def save(self, *, asset: Asset) -> None:
-        db.insert({**asset.model_dump(), "table": "asset"})
+        existing_asset = db.search(Query().id == asset.id)
+        if len(existing_asset) > 0:
+            db.update({**asset.model_dump()}, where("id") == asset.id)
+        else:
+            db.insert({**asset.model_dump(), "table": "asset"})
 
     async def delete(self, *, id: str) -> None:
         query = Query()
@@ -55,7 +59,11 @@ class GuideRepository(IGuideRepository):
         return [Guide.model_validate(guide) for guide in guides]
 
     async def save(self, *, guide: Guide) -> None:
-        db.insert({**guide.model_dump(), "table": "guide"})
+        existing_guide = db.search(Query().id == guide.id)
+        if len(existing_guide) > 0:
+            db.update({**guide.model_dump()}, where("id") == guide.id)
+        else:
+            db.insert({**guide.model_dump(), "table": "guide"})
 
     async def delete(self, *, id: str) -> None:
         query = Query()
