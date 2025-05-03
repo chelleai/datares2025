@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from api.domain.aggregates.asset.entities import Concept
+from api.domain.aggregates.asset import Concept
 
 
 class CreateAssetRequest(BaseModel):

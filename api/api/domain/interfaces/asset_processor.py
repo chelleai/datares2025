@@ -2,12 +2,15 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+from api.domain.aggregates.asset import Concept
 
-class IdentifiedConcept(BaseModel):
+
+class CitedTerm(BaseModel):
     term: str
     citations: list[str]
-    definition: str
 
 
 class IAssetProcessor(Protocol):
-    async def process(self, *, content: str) -> list[IdentifiedConcept]: ...
+    async def identify_terms(self, *, content: str) -> list[CitedTerm]: ...
+    async def synthesize_definition(self, *, cited_term: CitedTerm) -> str: ...
+    async def process(self, *, content: str) -> list[Concept]: ...

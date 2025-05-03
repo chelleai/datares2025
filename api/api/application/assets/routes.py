@@ -1,7 +1,9 @@
+import uuid
+
 from fastapi import APIRouter, Depends
 
 from api.application.assets.models import AssetOverview, CreateAssetRequest, CreateAssetResponse, ListAssetsResponse
-from api.domain.aggregates.asset.aggregate import Asset
+from api.domain.aggregates.asset import Asset
 from api.domain.interfaces.asset_processor import IAssetProcessor
 from api.domain.repositories import IAssetRepository
 from api.infrastructure.repositories import AssetRepository
@@ -34,12 +36,8 @@ async def create_asset(
 
     This process analyzes the Markdown content for concepts.
     """
-    asset = Asset.create(name=body.name, content=body.content)
     concepts = await asset_processor.process(content=body.content)
-
-    for concept in concepts:
-        asset.add_concept(term=concept.term, citations=concept.citations, definition=concept.definition)
-
+    asset = Asset(id=str(uuid.uuid4()), name=body.name, content=body.content, concepts=concepts)
     await asset_repository.save(asset=asset)
     return CreateAssetResponse(id=asset.id)
 

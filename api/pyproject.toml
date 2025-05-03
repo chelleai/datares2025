@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "aikernel>=0.2.1",
     "fastapi[standard]>=0.115.12",
     "litellm>=1.67.6",
     "tinydb>=4.8.2",

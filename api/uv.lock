@@ -2,6 +2,19 @@ version = 1
 requires-python = ">=3.12"
 
 [[package]]
+name = "aikernel"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "litellm" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/36/ed/17687324ef6a4b59fdc9611e6e632278b1c698019ea1c48234d0c70ad1bc/aikernel-0.2.1.tar.gz", hash = "sha256:ac46eed4d08f0821b2f6178f33a6f306689dd44f40526770a0c845973599f921", size = 73783 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/05/fd7dc0b3317973014a207d5af0017c6e608e09fff122919913400c0b3107/aikernel-0.2.1-py3-none-any.whl", hash = "sha256:1e5b4e4887d542758e2fc44a59cc8dd5ab9851570d3f9a3e914791eb147cbd31", size = 12322 },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -99,6 +112,7 @@ name = "api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aikernel" },
     { name = "fastapi", extra = ["standard"] },
     { name = "litellm" },
     { name = "tinydb" },
@@ -106,6 +120,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aikernel", specifier = ">=0.2.1" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "litellm", specifier = ">=1.67.6" },
     { name = "tinydb", specifier = ">=4.8.2" },
