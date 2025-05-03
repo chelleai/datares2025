@@ -30,6 +30,7 @@ sketch
 /.env
 /TODO
 /db.json
+/.adc.json
 
 # all instances of
 notebooks
