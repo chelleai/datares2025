@@ -12,3 +12,14 @@ git status --> shows you what files you editted
 git add --> stage your changes 
 git commit --> commit your changes
 git push --> pushes your commit to your branch 
+
+Git Commands regarding Branches:
+git switch --> switch between branches
+git branch --> see what branch you're on or create a new one
+git checkout --> similar to git switch (older version)
+git merge --> connect your branch to another branch
+
+Note:
+- There's not a short explanation of branching, it's quite complicated, so please watch a video, ask chat, or ask Johnny
+- Nobody else can see changes on your local environment if you don't commit it 
+- You can always go back to an old commit in history, but don't get in the habit of committing bad code just to go back
