@@ -1,0 +1,14 @@
+ISSUES BOARD TO TRACK BRANCHES / ISSUE STATUSES
+
+
+Structure for Branches
+Branch Name (format as 'issue-[##]'): ____
+Issue/Idea being Explored: ____
+Current Status (New, Pending, Finished): ____
+
+
+Basic Git Commands:
+git status --> shows you what files you editted 
+git add --> stage your changes 
+git commit --> commit your changes
+git push --> pushes your commit to your branch 
