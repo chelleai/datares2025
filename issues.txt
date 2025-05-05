@@ -23,3 +23,7 @@ Note:
 - There's not a short explanation of branching, it's quite complicated, so please watch a video, ask chat, or ask Johnny
 - Nobody else can see changes on your local environment if you don't commit it 
 - You can always go back to an old commit in history, but don't get in the habit of committing bad code just to go back
+
+
+
+change
