@@ -26,4 +26,10 @@ Note:
 
 
 
-change
+
+
+============= BRANCHES =============
+
+issue-01
+Experimenting with first NN for guide team on "Math" + "Step-by-Step Reasoning"
+New
