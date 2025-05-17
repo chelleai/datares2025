@@ -1,61 +1,87 @@
-# Chelle-DataRes 2025
+# Guides Team Reinforcement Learning Agent
 
-Welcome, DataRes students!
+This project implements a reinforcement learning (RL) system that optimizes educational prompts based on subject matter and learning styles.
 
-The goals of this project are two-fold. First, we want to optimize the process of extracting key educational terminology and citations from source materials, such as papers, blogs, and textbook chapters. Second, we want to improve the learning experience of communicating with an intelligent AI tutor.
+## Overview
 
-To facilitate working on both of these projects, this repository contains an API and small web app for doing just these things. In this app you can:
+The system uses a neural network to learn optimal combinations of educational parameters:
+- Core instructor roles
+- Pedagogy approaches
+- Response formats
 
-1. Upload and process Markdown documents to produce collections of "Concepts", where a Concept is a term with a set of citations and a synthesized definition.
-2. Chat with a "Guide" that has awareness of a set of Concepts and a student's learning style.
+These parameters are optimized for different combinations of:
+- Subject matter (e.g., Linear Algebra, Computer Science)
+- Learning styles (e.g., Visual, Examples and Analogies)
 
-## Getting Started
+## Setup
 
-After cloning this repository, you'll need to:
+### Requirements
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
-2. Run the initialization script by running: `scripts/init`
-3. Start the API in one process by running: `scripts/run-api`
-4. Start the app in another process by running: `scripts/run-app`
+To run this code, you'll need:
+- Python 3.7+
+- PyTorch or TensorFlow (two implementations available)
+- NumPy
 
-At this point, you should have a running application at `http://localhost:3000` that can interact with the backend, which is running locally at `http://localhost:8000`.
+Install dependencies:
 
-## Developing
+```bash
+# For PyTorch implementation
+pip install torch numpy
 
-### Collaboration
+# For TensorFlow implementation
+pip install tensorflow numpy
+```
 
-To make sure that each of you is able to work independently and without causing code conflicts amongst each other, it is best to develop on **branches**. A GitHub branch is a copy of the codebase to which you can push your own individual changes without impacting anyone else's work.
+### Running the System
 
-You should set up a new branch each time you want to try a new idea. Each branch should be connected to an issue, where you describe what you are going to do on the branch. For example, you might start by writing an issue describing a prompting strategy you want to try. Then you would check out a corresponding branch and implement that strategy. To set up a new branch:
+To train the RL agent:
 
-1. Create an issue using the Issues board in the repository. Take note of the issue number after creating it.
-2. Checkout a new branch named after the issue: `git checkout -b issue-[##]`, e.g. `git checkout -b issue-01`.
-3. Develop and push your changes to your branch, using `git add`, `git commit`, and `git push`.
+```bash
+# For PyTorch implementation
+python guides_rl_agent.py
 
-Typically in software projects, branches are creating with the intention of being merged back into main. Because the goal of these branches is to track experiments, we may instead choose to keep the branches and issues open for the lifetime of the project, as a record of experiments and to be able to easily flip between strategies by switching branches (via `git checkout [branch-name]`).
+# For TensorFlow implementation
+python guides_rl_agent_tf.py
+```
 
-### Asset Processing Project
+## How It Works
 
-To make changes to the asset processing AI, you'll want to edit this file:
+1. The system defines two "bins" of input parameters:
+   - Concepts/Subjects (what is being taught)
+   - Learning Styles (how the student prefers to learn)
 
-- `api/api/infrastructure/services/asset_processor.py`
+2. For each combination of concept and learning style, the RL agent learns to select:
+   - The best teacher/instructor role
+   - The optimal pedagogy approach
+   - The most effective response format
 
-There are two main methods in there to concern yourself with: `identify_terms`, and `synthesize_definition`. The docstrings explain more about what they do and how you should go about writing them.
+3. The training process uses a simulated scoring function that will eventually be replaced with actual evaluations using a detailed rubric.
 
-### Guide Experience Project
+4. After training, the system outputs optimal prompt parameters for each concept-style combination.
 
-To make changes to the guide AI, you'll want to edit this file:
+## Implementations
 
-` api/api/infrastructure/services/guide_agent.py`
+Two implementations are provided:
+- `guides_rl_agent.py` - PyTorch implementation
+- `guides_rl_agent_tf.py` - TensorFlow implementation
 
-There is one method in this file, `respond`, to focus on. The docstring explains more about what it does and how you should go about writing it.
+Both implementations provide identical functionality but use different deep learning frameworks.
 
-## API Documentation
+## Prompt Template
 
-You can view the API docs at `http://localhost:8000/docs`. Here you can also interact with the API and invoke endpoints directly, if you want.
+The system uses a prompt template of the form:
 
-## Database
+```
+Your role is a [CORE_ROLE] teaching a student about [CONCEPT] who likes [LEARNING_STYLE].
+Answer the specific question: [QUESTION] Then help the student learn the concept and other related concepts.
+Use [PEDAGOGY_APPROACH] to help the student learn.
+Write your response in plain text with no emojis or symbols.
+```
 
-The application runs entirely on a local database, which will be stored at `db.json`. As the database is local, everyone has their own, so there is no need to worry about sharing data or stepping on each other's toes.
+## Extending the System
 
-You can reset the database at any time simply by removing `db.json`. After you do, restart the API by killing the process and re-running `scripts/run-api`.
+To expand this system:
+1. Add more concepts/subjects to the `CONCEPTS` list
+2. Add more learning styles to the `LEARNING_STYLES` list
+3. Refine the action space (`CORE_ROLES`, `PEDAGOGY_APPROACHES`, `RESPONSE_FORMATS`) 
+4. Implement a more accurate scoring function by replacing the placeholder with actual LLM generation and rubric evaluation
