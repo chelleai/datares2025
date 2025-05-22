@@ -385,46 +385,5 @@ def main():
 
 
 if __name__ == "__main__":
-    #main()
-
-    policy = PromptPolicy().to(DEVICE)
-    optimizer = optim.Adam(policy.parameters(), lr=1e-4)
-
-    term = "protein"
-    citations = [
-        "Each chromosome also includes proteins called histones that help to organize the DNA.",
-        "Proteins influence traits The cell uses the information found in genes to build other molecules, primarily proteins.",
-        "Proteins are molecules that perform many different functions in a cell.",
-        "For example, proteins are involved in defense, storage, transport, cellular communication, movement, and maintaining cell structure.",
-        "Proteins are made up of monomers called amino acids.",
-        "Each protein is made up of one or more polypeptides, which are folded and coiled into a specific three-dimensional (3D) structure.",
-        "This 3D structure determines the protein's function.",
-        "So, how does the cell turn the information in genes into proteins?",
-        "Specifically, the order of nucleotides in a gene determines the order of amino acids in one or more proteins.",
-        "This means that variation in the order of nucleotides in a gene can produce variation in the order of amino acids in a protein, which can affect the protein's function.",
-        "A protein is shown as a globular, or lumpy ball-like, shape.",
-        "Stretching out from the protein is a string of amino acids, which are represented as circles.",
-        "A protein is made up of subunits called amino acids.",
-        "The order of nucleotides in a gene determines the order of amino acids in one or more proteins.",
-        "An organism has many different genes, and so can produce many different proteins.",
-        "These proteins carry out a variety of functions that, in turn, affect the organism's traits.",
-        "In these cats, the coat color trait is influenced by the MC1R gene, which encodes the MC1R protein.",
-        "The MC1R protein is a receptor located on the surface of cells responsible for producing melanin-the pigment that gives color to animals' skin and hair.",
-        "Leopards and black panthers have different variations in the MC1R gene, and therefore different versions of the MC1R protein.",
-        "In black panthers, the MC1R protein is highly active, resulting in a higher production of eumelanin and a darker coat.",
-        "In leopards, the MC1R protein is less active, resulting in the golden coat color trait.",
-        "A diagram shows the relationships between the M C 1 R gene, the M C 1 R protein, and the coat color trait.",
-        "An arrow points from the gene to a structure embedded in a cell membrane labeled M C 1 R protein.",
-        "An arrow points from the protein to two close-up images of coat patterns.",
-        "The MC1R gene encodes the MC1R protein.",
-        "The activity of the MC1R protein determines if a leopard will have a spotted or solid black coat.",
-        "In summary, an organism's genes determine the structure and function of its proteins.",
-        "These proteins in turn carry out functions in the cell that influence an organism's traits."
-    ]
-
-    loss, reward, actions, prompt, response, evaluation = train_step(policy, optimizer, term, citations)
-    print(f"Loss: {loss:.4f}, Reward: {reward:.2f}")
-    print("\n")
-    print(prompt)
-
+    main()
 
