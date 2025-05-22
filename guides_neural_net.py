@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import json
 from typing import List, Dict, Tuple, Any
 
 
@@ -60,96 +61,7 @@ def calculate_rubric_score(concept_idx: int, style_idx: int, role_idx: int, peda
     5. Friendly and Encouraging (10%) - Tone and supportiveness
     6. Handles New Concepts Well (5%) - Ability to incorporate additional concepts
     """
-    # Initialize all scores at 1.0 (minimum score)
-    understanding_score = 1.0
-    learning_style_score = 1.0
-    follow_ups_score = 1.0
-    explanation_score = 1.0
-    friendliness_score = 1.0
-    new_concepts_score = 1.0
-    
-    # Simple scoring for Understanding (30%)
-    if core_roles[role_idx] == "College professor with a PhD and 20 years of teaching experience":
-        understanding_score = 5.0  # Best for understanding
-    elif core_roles[role_idx] == "Industry expert with practical experience":
-        if concepts[concept_idx] in ["Computer Science", "Engineering", "Business"]:
-            understanding_score = 4.5  # Great for practical subjects
-        else:
-            understanding_score = 3.5  # Good for other subjects
-    elif core_roles[role_idx] == "Experienced high school teacher":
-        understanding_score = 4.0  # Very good general understanding
-    elif core_roles[role_idx] == "Graduate student teaching assistant":
-        understanding_score = 3.0  # Above average understanding
-    elif core_roles[role_idx] == "Self-taught expert and curriculum designer":
-        understanding_score = 3.5  # Good understanding
-    
-    # Simple scoring for Learning Style (25%)
-    # Check specific matches between learning style and pedagogy
-    if (learning_styles[style_idx] == "Visual" and pedagogy_approaches[pedagogy_idx] == "Problem-Based Learning") or \
-       (learning_styles[style_idx] == "Logical" and pedagogy_approaches[pedagogy_idx] == "Inquiry-Based Learning"):
-        learning_style_score = 5.0  # Perfect match
-    elif (learning_styles[style_idx] == "Verbal" and pedagogy_approaches[pedagogy_idx] == "Direct Instruction") or \
-         (learning_styles[style_idx] == "Social" and pedagogy_approaches[pedagogy_idx] == "Collaborative-Based Learning"):
-        learning_style_score = 4.5  # Great match
-    elif (learning_styles[style_idx] == "Physical" and pedagogy_approaches[pedagogy_idx] == "Problem-Based Learning"):
-        learning_style_score = 4.0  # Good match
-    elif (learning_styles[style_idx] == "Musical" or learning_styles[style_idx] == "Solitary") and \
-         (pedagogy_approaches[pedagogy_idx] == "Reflective Approach"):
-        learning_style_score = 4.0  # Good match
-    else:
-        learning_style_score = 2.5  # Average match
-    
-    # Simple scoring for Follow-Ups (15%)
-    if pedagogy_approaches[pedagogy_idx] == "Inquiry-Based Learning":
-        follow_ups_score = 5.0  # Best for follow-up questions
-    elif pedagogy_approaches[pedagogy_idx] == "Problem-Based Learning":
-        follow_ups_score = 4.0  # Very good for follow-ups
-    elif pedagogy_approaches[pedagogy_idx] == "Collaborative-Based Learning":
-        follow_ups_score = 3.5  # Good for follow-ups
-    elif pedagogy_approaches[pedagogy_idx] == "Reflective Approach":
-        follow_ups_score = 3.0  # Above average
-    else:
-        follow_ups_score = 2.0  # Average
-    
-    # Simple scoring for Explanation Quality (15%)
-    if core_roles[role_idx] == "Experienced high school teacher":
-        explanation_score = 5.0  # Best at explaining
-    elif core_roles[role_idx] == "College professor with a PhD and 20 years of teaching experience":
-        explanation_score = 4.0  # Very good at explaining
-    elif core_roles[role_idx] == "Graduate student teaching assistant":
-        explanation_score = 3.5  # Good at explaining
-    else:
-        explanation_score = 3.0  # Average explanation
-    
-    # Simple scoring for Friendliness (10%)
-    if core_roles[role_idx] == "Experienced high school teacher":
-        friendliness_score = 5.0  # Most friendly
-    elif core_roles[role_idx] == "Graduate student teaching assistant":
-        friendliness_score = 4.5  # Very friendly
-    elif core_roles[role_idx] == "Self-taught expert and curriculum designer":
-        friendliness_score = 4.0  # Friendly
-    elif core_roles[role_idx] == "Industry expert with practical experience":
-        friendliness_score = 3.0  # Average friendliness
-    else:
-        friendliness_score = 2.5  # Less friendly
-    
-    # Simple scoring for New Concepts (5%)
-    if core_roles[role_idx] == "College professor with a PhD and 20 years of teaching experience":
-        new_concepts_score = 5.0  # Best at connecting concepts
-    elif core_roles[role_idx] == "Industry expert with practical experience":
-        new_concepts_score = 4.0  # Very good at connecting concepts
-    else:
-        new_concepts_score = 3.0  # Average at connecting concepts
-    
-    # Calculate weighted score
-    weighted_score = (
-        0.30 * understanding_score +
-        0.25 * learning_style_score +
-        0.15 * follow_ups_score +
-        0.15 * explanation_score +
-        0.10 * friendliness_score +
-        0.05 * new_concepts_score
-    )
+ 
     
     return weighted_score
 
@@ -239,6 +151,7 @@ def train_rl_agent():
 
     # Track results
     results = {}
+    training_results = []
 
     # Train on each permutation
     for idx, (concept_name, style_name) in enumerate(perms):
@@ -293,6 +206,27 @@ def train_rl_agent():
                 
                 # we REINFORCE loss function 
                 loss = -total_log_prob * reward
+
+                # Log results for this episode
+                episode_result = {
+                    "episode": ep + 1,
+                    "reward": float(reward),
+                    "actions": {
+                        "core_role": core_roles[int(role_idx)],
+                        "pedagogical_strategy": pedagogy_approaches[int(ped_idx)],
+                        "answer_format": "structured",
+                        "memory_mode": "active",
+                        "tone_style": "friendly"
+                    },
+                    "prompt": format_prompt(
+                        concept_name,
+                        style_name,
+                        core_roles[int(role_idx)],
+                        pedagogy_approaches[int(ped_idx)]
+                    ),
+                    "response": "Training in progress..."
+                }
+                training_results.append(episode_result)
             
             #updae weights
             grads = tape.gradient(loss, net.trainable_variables)
@@ -325,7 +259,6 @@ def train_rl_agent():
             pedagogy_approaches[best_ped]
         )
         
-
         print("  Best params for " + concept_name + " & " + style_name + ":")
         print("    Role: " + core_roles[best_role])
         print("    Pedagogy: " + pedagogy_approaches[best_ped])
@@ -333,6 +266,9 @@ def train_rl_agent():
         print("  Sample prompt:")
         print("    " + sample)
 
+        # Save results to JSON file after each permutation
+        with open('results.json', 'w') as f:
+            json.dump(training_results, f, indent=2)
 
     print("Best Parameters")
     for (c, s), params in results.items():
@@ -342,6 +278,9 @@ def train_rl_agent():
         print("  (Score: " + str(round(params['score'], 2)) + ")")
         print("-" * 20)
     
+    # Final save of results
+    with open('results.json', 'w') as f:
+        json.dump(training_results, f, indent=2)
 
 if __name__ == "__main__":
     train_rl_agent() 
