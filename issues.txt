@@ -33,3 +33,7 @@ Note:
 issue-01
 Experimenting with first NN for guide team on "Math" + "Step-by-Step Reasoning"
 New
+
+issue-02
+Experimenting with NN for asset team (Jessica)
+New
