@@ -37,3 +37,9 @@ notebooks
 .aider*
 .env
 .vercel
+
+# Model checkpoints and logs
+checkpoints/
+*.pt
+training_logs.jsonl
+training_logs.jsonl.backup
