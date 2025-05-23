@@ -33,17 +33,6 @@ pip install tensorflow numpy
 ```
 
 ### Running the System
-
-To train the RL agent:
-
-```bash
-# For PyTorch implementation
-python guides_rl_agent.py
-
-# For TensorFlow implementation
-python guides_rl_agent_tf.py
-```
-
 ## How It Works
 
 1. The system defines two "bins" of input parameters:
@@ -59,29 +48,3 @@ python guides_rl_agent_tf.py
 
 4. After training, the system outputs optimal prompt parameters for each concept-style combination.
 
-## Implementations
-
-Two implementations are provided:
-- `guides_rl_agent.py` - PyTorch implementation
-- `guides_rl_agent_tf.py` - TensorFlow implementation
-
-Both implementations provide identical functionality but use different deep learning frameworks.
-
-## Prompt Template
-
-The system uses a prompt template of the form:
-
-```
-Your role is a [CORE_ROLE] teaching a student about [CONCEPT] who likes [LEARNING_STYLE].
-Answer the specific question: [QUESTION] Then help the student learn the concept and other related concepts.
-Use [PEDAGOGY_APPROACH] to help the student learn.
-Write your response in plain text with no emojis or symbols.
-```
-
-## Extending the System
-
-To expand this system:
-1. Add more concepts/subjects to the `CONCEPTS` list
-2. Add more learning styles to the `LEARNING_STYLES` list
-3. Refine the action space (`CORE_ROLES`, `PEDAGOGY_APPROACHES`, `RESPONSE_FORMATS`) 
-4. Implement a more accurate scoring function by replacing the placeholder with actual LLM generation and rubric evaluation
