@@ -24,14 +24,6 @@ To run this code, you'll need:
 
 Install dependencies:
 
-```bash
-# For PyTorch implementation
-pip install torch numpy
-
-# For TensorFlow implementation
-pip install tensorflow numpy
-```
-
 ### Running the System
 ## How It Works
 
