@@ -213,7 +213,7 @@ def calculate_rubric_score(concept_idx: int, style_idx: int, role_idx: int, peda
     Fills in the template with example values based on the provided indices, sends it to Gemini with the rubric, and returns the float score.
     Rate limits the API calls to avoid exceeding Gemini's quota.
     """
-    genai.configure(api_key="AIzaSyCInmc6YCt6jhe4XC4eyzwcpQPJ9jzxRVY")
+    genai.configure(api_key="")
     model = genai.GenerativeModel('gemini-1.5-flash')
 
     concept = idx_to_concept.get(concept_idx, "[concept]")
