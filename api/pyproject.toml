@@ -1,0 +1,23 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nash Taylor", email = "nashtaylor22@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aikernel>=0.2.1",
+    "fastapi[standard]>=0.115.12",
+    "litellm>=1.67.6",
+    "tinydb>=4.8.2",
+    "tinydb-serialization>=2.2.0",
+]
+
+[project.scripts]
+api = "api:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

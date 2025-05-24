@@ -1,0 +1,69 @@
+# clean code tools
+[tool.ruff]
+exclude = [
+    "__init__.py",
+    ".venv",
+    "**/.venv",
+    "**.pyi",
+    "**/notebooks",
+    "node_modules",
+]
+force-exclude = true
+line-length = 120
+
+[tool.ruff.lint]
+select = [ "E", "F", "I", "UP" ]
+ignore = [ "E501" ]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "api",
+]
+
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingModuleSource = false
+useLibraryCodeForTypes = false
+reportImportCycles = true
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+exclude = [
+    "**/.venv",
+    "**/__init__.py",
+    "**/node_modules",
+    "**/notebooks",
+]
+executionEnvironments = [
+    { root = "api", extraPaths = [ "api/.venv/lib/python3.12/site-packages" ] },
+]
+stubPath = ".stubs"
+
+# testing
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::SyntaxWarning",
+]
+asyncio_default_fixture_loop_scope = "session"
+asyncio_mode = "auto"
+
+# uv
+[project]
+name = "chelle"
+version = "0.1.0"
+description = "Chelle is an AI-powered teaching assistant."
+readme = "README.md"
+requires-python = "==3.12.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "gitpython>=3.1.44",
+    "ipykernel>=6.29.5",
+    "pyright==1.1.399",
+    "pytest>=8.3.4",
+    "ruff>=0.9.4",
+    "toml>=0.10.2",
+]
