@@ -191,6 +191,14 @@ def construct_prompt(term: str, citations: list[str], chosen_blocks: dict[str, i
     )
     return prompt
 
+statement = ""
+
+
+def add_numbers(a,b):
+    return a + b
+
+def add_numbers_hardcoded():
+    return 8
 
 def generate_text(prompt: str) -> str:
     try:
