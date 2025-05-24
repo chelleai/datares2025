@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Optional
 import os
 import json
 import time
@@ -14,7 +14,13 @@ import google.generativeai as genai
 # Load environment variables
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    print("GEMINI_API_KEY not found in .env file. Please set it up.")
+    exit(1)
 genai.configure(api_key=GEMINI_API_KEY)
+
+# Ensure this is at the top
+from typing import List, Dict, Tuple, Optional # No Any
 
 # Constants
 DEVICE = "cpu"
@@ -22,12 +28,14 @@ LR = 3e-4
 HIDDEN_SIZE = 32
 ENTROPY_LAMBDA = 1e-2
 BASELINE_BETA = 0.9
-N_EPISODES = 100
+N_EPISODES = 200
 TEMPERATURE_LLM = 0
-MODEL_NAME_LLM = "gemini-pro"
+MODEL_NAME_LLM = "gemini-1.5-flash-latest"
 EVAL_RETRIES = 3
 SAVE_INTERVAL = 10
 LOG_INTERVAL = 5
+
+STUDENT_QUESTION = "What is the core idea of this concept and how can I apply it?"
 
 # Rubric for evaluation
 RUBRIC_TEXT = """
@@ -120,6 +128,9 @@ Please output a numeric score between 0 and 100 for the overall quality of the a
 # Prompt template
 PROMPT_TEMPLATE = """
 Imagine you are a {teacher_role} teaching a student about {concept}. The student is a {learning_style} learner. 
+
+Student's question: "{student_question}"
+
 1. begin with a concise explanation of {concept}, structured logically for clarity.
 2. provide at least one real-world example illustrating the concept.
 3. use {theoretical_strategy} techniques (ex. analogies, asking questions).
@@ -127,8 +138,8 @@ Imagine you are a {teacher_role} teaching a student about {concept}. The student
 5. {memory_mode}
 6. {tone_style}
 7. include a brief recap: "In summary, …".
-8. at the end, offer motivation: "you've got this, keep going!".
-9. encourage feedback: "does this make sense? lmk if you'd like more examples or a diff approach."
+8. at the end, offer motivation: "You've got this, keep going!".
+9. encourage feedback: "Does this make sense? Let me know if you'd like more examples or a different approach."
 Write everything in plain text, no emojis or symbols.
 """.strip()
 
@@ -218,46 +229,29 @@ idx_to_concept: Dict[int, str] = {i: concept for i, concept in enumerate(CONCEPT
 style_to_idx: Dict[str, int] = {style: i for i, style in enumerate(LEARNING_STYLES)}
 idx_to_style: Dict[int, str] = {i: style for i, style in enumerate(LEARNING_STYLES)}
 
-# placeholder rubric eval
-# this fxn will simulate the process of generating a response with an LLM using the chosen parameters and then scoring it with the rubric
-# for now, it's hardcoded and will return a somewhat random score, but ideally, it should favor certain combos to guide the learning
-
-def calculate_rubric_score(concept_idx: int, style_idx: int, role_idx: int, strategy_idx: int, 
-                         format_idx: int, memory_idx: int, tone_idx: int) -> float:
-    """
-    Calculate rubric score between 0 and 100.
-    The actual implementation would involve:
-    1. Formatting the prompt template with the chosen parameters.
-    2. Sending the prompt to an LLM (e.g., Chelle AI).
-    3. Evaluating the LLM's response using the detailed rubric.
-    """
-    # introduce some bias for demonstration:
-    score: float = 60.0  # base score (3.0 * 20 to scale to 0-100)
-
-    if LEARNING_STYLES[style_idx] == "Visual" and ANSWER_FORMATS[format_idx] == "Concept map description":
-        score += 30.0  # 1.5 * 20
-    if LEARNING_STYLES[style_idx] == "Example-Based" and THEORETICAL_STRATEGIES[strategy_idx] == "Use of analogies":
-        score += 20.0  # 1.0 * 20
-    if CONCEPTS[concept_idx] == "Algebra" and LEARNING_STYLES[style_idx] == "Step-by-Step":
-        score += 20.0  # 1.0 * 20
-    if TEACHER_ROLES[role_idx] == "Patient mentor for beginners":
-        score += 10.0  # 0.5 * 20
-    if MEMORY_MODES[memory_idx] == "Briefly recap previous answers in 2 sentences":
-        score += 10.0  # 0.5 * 20
-    if TONE_STYLES[tone_idx] == "Encouraging and upbeat":
-        score += 10.0  # 0.5 * 20
-
-    # add some randomness
-    score += np.random.uniform(-10.0, 10.0)  # -0.5 to 0.5 * 20
+def calculate_rubric_score(
+    actions_dict: Dict[str, int], # Takes dict with int indices
+    concept_name: str, 
+    style_name: str, 
+    current_episode_num: int
+) -> Tuple[float, str, str]: # Returns score, full_prompt, actual_response
     
-    # make sure score is within 0-100 range
-    return max(0.0, min(100.0, score))
+    full_prompt_for_llm = assemble_prompt(actions_dict, concept_name, style_name, STUDENT_QUESTION)
+    actual_tutoring_response = get_tutoring_response(full_prompt_for_llm)
+
+    if actual_tutoring_response == "Failed to generate response.":
+        # This string is a specific constant from get_tutoring_response
+        print(f"WARNING: Episode {current_episode_num}: Failed to get tutoring response from LLM. Assigning low reward (10.0).")
+        return 10.0, full_prompt_for_llm, "FAILED_TO_GENERATE_RESPONSE"
+
+    score = evaluate_response(actual_tutoring_response)
+    return score, full_prompt_for_llm, actual_tutoring_response
 
 # NN defn
 class PromptPolicyNetwork(nn.Module):
     def __init__(self, num_concepts: int, num_styles: int, num_roles: int, num_strategies: int, 
                  num_formats: int, num_memory_modes: int, num_tone_styles: int, 
-                 embedding_dim: int = 32, hidden_dim: int = 64):
+                 embedding_dim: int = 16, hidden_dim: int = 32):
         super(PromptPolicyNetwork, self).__init__()
         self.concept_embedding = nn.Embedding(num_concepts, embedding_dim)
         self.style_embedding = nn.Embedding(num_styles, embedding_dim)
@@ -287,8 +281,8 @@ class PromptPolicyNetwork(nn.Module):
 
         return role_logits, strategy_logits, format_logits, memory_logits, tone_logits
 
-# fxn to select 20 unique (concept, style) permutations
-def get_target_permutations(num_permutations: int = 20) -> List[Tuple[str, str]]:
+# fxn to select 10 unique (concept, style) permutations
+def get_target_permutations(num_permutations: int = 10) -> List[Tuple[str, str]]:
     all_pairs: List[Tuple[str, str]] = []
     for concept_name in CONCEPTS:
         for style_name in LEARNING_STYLES:
@@ -306,9 +300,10 @@ def get_target_permutations(num_permutations: int = 20) -> List[Tuple[str, str]]
 class EpisodeLog:
     episode: int
     reward: float
-    actions: Dict[str, int]
-    prompt: str
-    response: str
+    actions: Dict[str, int]  # Stores integer indices
+    prompt_components: str   # e.g., "Concept: Algebra, Style: Visual"
+    full_prompt_text: str    # Actual prompt to LLM
+    tutoring_response_text: str # Actual response from LLM
     
     def to_dict(self):
         return asdict(self)
@@ -318,14 +313,21 @@ def call_llm_with_retry(prompt: str, retries: int = EVAL_RETRIES) -> Optional[st
         try:
             model = genai.GenerativeModel(MODEL_NAME_LLM)
             response = model.generate_content(prompt)
-            return response.text.strip()
-        except Exception as e:
+            if hasattr(response, 'text') and response.text:
+                return response.text.strip()
+            print(f"Warning: LLM response text was empty or not found. Attempt {attempt+1}/{retries}. Prompt: '{prompt[:100]}...'")
             if attempt < retries - 1:
-                print(f"API call failed: {e}. Retrying ({attempt+1}/{retries})...")
+                time.sleep(2 ** attempt) # Exponential backoff
+            else:
+                return None # Exhausted retries
+        except Exception as e:
+            print(f"API call failed during attempt {attempt+1}/{retries}: {e}. Prompt: '{prompt[:100]}...'")
+            if attempt < retries - 1:
                 time.sleep(2 ** attempt)
             else:
-                print(f"API call failed after {retries} attempts: {e}")
+                print(f"API call failed after {retries} attempts for prompt: '{prompt[:100]}...'")
                 return None
+    return None # Should be caught by else in loop unless retries is 0
 
 def get_tutoring_response(prompt: str) -> str:
     return call_llm_with_retry(prompt) or "Failed to generate response."
@@ -349,7 +351,7 @@ def evaluate_response(answer_text: str) -> float:
         print(f"Error extracting score: {e}")
         return 50.0
 
-def assemble_prompt(actions: Dict[str, int], concept: str, style: str) -> str:
+def assemble_prompt(actions: Dict[str, int], concept: str, style: str, student_question: str) -> str:
     filled_blocks = {
         "teacher_role": TEACHER_ROLES[actions["role"]],
         "concept": concept,
@@ -357,7 +359,8 @@ def assemble_prompt(actions: Dict[str, int], concept: str, style: str) -> str:
         "theoretical_strategy": THEORETICAL_STRATEGIES[actions["strategy"]],
         "answer_format": ANSWER_FORMATS[actions["format"]],
         "memory_mode": MEMORY_MODES[actions["memory"]],
-        "tone_style": TONE_STYLES[actions["tone"]]
+        "tone_style": TONE_STYLES[actions["tone"]],
+        "student_question": student_question
     }
     return PROMPT_TEMPLATE.format(**filled_blocks)
 
@@ -367,21 +370,33 @@ def save_model(policy: PromptPolicyNetwork, episode: int):
     print(f"Model checkpoint saved at episode {episode}")
 
 def save_logs(logs: List[EpisodeLog], filename: str = "training_logs.jsonl"):
-    # Create a backup of existing logs if file exists
     if os.path.exists(filename):
-        backup_filename = f"{filename}.backup"
-        os.rename(filename, backup_filename)
-    
-    # Write all logs to the file
-    with open(filename, "w") as f:
-        for log in logs:
-            f.write(json.dumps(log.to_dict()) + "\n")
-    print(f"Logs saved to {filename}")
+        backup_filename = f"{filename}.{time.strftime('%Y%m%d-%H%M%S')}.backup"
+        try:
+            os.rename(filename, backup_filename)
+            print(f"Backed up existing log to {backup_filename}")
+        except OSError as e:
+            print(f"Error backing up log '{filename}' to '{backup_filename}': {e}. Appending.")
+            try:
+                with open(filename, "a") as f:
+                    for log_entry in logs:
+                        f.write(json.dumps(log_entry.to_dict()) + "\n")
+                print(f"Appended {len(logs)} log entries to {filename}")
+            except Exception as write_e:
+                print(f"Failed to append logs to {filename}: {write_e}")
+            return
+
+    try:
+        with open(filename, "w") as f:
+            for log_entry in logs:
+                f.write(json.dumps(log_entry.to_dict()) + "\n")
+        print(f"Logs saved to {filename} ({len(logs)} entries)")
+    except Exception as e:
+        print(f"Error writing logs to {filename}: {e}")
 
 def print_epoch_summary(episode: int, reward: float, recent_rewards: List[float], best_reward: float):
     avg_reward = sum(recent_rewards) / len(recent_rewards) if recent_rewards else 0
-    print(f"Episode {episode}/{N_EPISODES} | Reward: {reward:.2f} | "
-          f"Avg last {len(recent_rewards)}: {avg_reward:.2f} | Best: {best_reward:.2f}")
+    print(f"Ep {episode} | Rew: {reward:.2f} | Avg10: {avg_reward:.2f} | Best: {best_reward:.2f}")
 
 def train_rl_agent():
     torch.manual_seed(42)
@@ -395,9 +410,7 @@ def train_rl_agent():
         num_strategies=len(THEORETICAL_STRATEGIES),
         num_formats=len(ANSWER_FORMATS),
         num_memory_modes=len(MEMORY_MODES),
-        num_tone_styles=len(TONE_STYLES),
-        embedding_dim=16,
-        hidden_dim=32
+        num_tone_styles=len(TONE_STYLES)
     ).to(DEVICE)
     
     optimizer = optim.Adam(net.parameters(), lr=LR)
@@ -408,7 +421,7 @@ def train_rl_agent():
     best_reward = float('-inf')
     best_episode = 0
     
-    target_permutations = get_target_permutations(20)
+    target_permutations = get_target_permutations(10)
     total_episodes = len(target_permutations) * N_EPISODES
     current_episode = 0
     
@@ -432,9 +445,10 @@ def train_rl_agent():
         for episode in range(1, N_EPISODES + 1):
             current_episode += 1
             
-            # Get actions from policy
+            # Forward pass through policy network
             role_logits, strategy_logits, format_logits, memory_logits, tone_logits = net(concept_tensor, style_tensor)
             
+            # Get action probabilities and distributions
             role_probs = F.softmax(role_logits, dim=-1)
             strategy_probs = F.softmax(strategy_logits, dim=-1)
             format_probs = F.softmax(format_logits, dim=-1)
@@ -447,27 +461,36 @@ def train_rl_agent():
             memory_dist = torch.distributions.Categorical(memory_probs)
             tone_dist = torch.distributions.Categorical(tone_probs)
             
-            chosen_role_idx = role_dist.sample()
-            chosen_strategy_idx = strategy_dist.sample()
-            chosen_format_idx = format_dist.sample()
-            chosen_memory_idx = memory_dist.sample()
-            chosen_tone_idx = tone_dist.sample()
+            # Sample action tensors
+            chosen_role_idx_tensor = role_dist.sample()
+            chosen_strategy_idx_tensor = strategy_dist.sample()
+            chosen_format_idx_tensor = format_dist.sample()
+            chosen_memory_idx_tensor = memory_dist.sample()
+            chosen_tone_idx_tensor = tone_dist.sample()
             
-            # Calculate log probabilities and entropies
-            log_prob_role = role_dist.log_prob(chosen_role_idx)
-            log_prob_strategy = strategy_dist.log_prob(chosen_strategy_idx)
-            log_prob_format = format_dist.log_prob(chosen_format_idx)
-            log_prob_memory = memory_dist.log_prob(chosen_memory_idx)
-            log_prob_tone = tone_dist.log_prob(chosen_tone_idx)
-            
+            # Calculate log probabilities using action tensors
+            log_prob_role = role_dist.log_prob(chosen_role_idx_tensor)
+            log_prob_strategy = strategy_dist.log_prob(chosen_strategy_idx_tensor)
+            log_prob_format = format_dist.log_prob(chosen_format_idx_tensor)
+            log_prob_memory = memory_dist.log_prob(chosen_memory_idx_tensor)
+            log_prob_tone = tone_dist.log_prob(chosen_tone_idx_tensor)
             total_log_prob = log_prob_role + log_prob_strategy + log_prob_format + log_prob_memory + log_prob_tone
+
+            # Convert action tensors to Python integers for dicts and function calls
+            actions_dict_for_log_and_prompt = {
+                "role": chosen_role_idx_tensor.item(),
+                "strategy": chosen_strategy_idx_tensor.item(),
+                "format": chosen_format_idx_tensor.item(),
+                "memory": chosen_memory_idx_tensor.item(),
+                "tone": chosen_tone_idx_tensor.item()
+            }
             
-            # Get reward
-            reward = calculate_rubric_score(
-                current_concept_idx, current_style_idx,
-                int(chosen_role_idx.item()), int(chosen_strategy_idx.item()), 
-                int(chosen_format_idx.item()), int(chosen_memory_idx.item()),
-                int(chosen_tone_idx.item())
+            # Get reward, full prompt, and tutoring response
+            reward, logged_full_prompt, logged_tutoring_response = calculate_rubric_score(
+                actions_dict_for_log_and_prompt, 
+                concept_name, 
+                style_name, 
+                current_episode
             )
             
             # Update baseline
@@ -477,9 +500,9 @@ def train_rl_agent():
             advantage = reward - baseline
             policy_loss = -(advantage) * total_log_prob
             entropy_loss = -ENTROPY_LAMBDA * (
-                role_dist.entropy() + strategy_dist.entropy() + 
-                format_dist.entropy() + memory_dist.entropy() + 
-                tone_dist.entropy()
+                role_dist.entropy().sum() + strategy_dist.entropy().sum() + 
+                format_dist.entropy().sum() + memory_dist.entropy().sum() + 
+                tone_dist.entropy().sum()
             )
             total_loss = policy_loss + entropy_loss
             
@@ -488,27 +511,20 @@ def train_rl_agent():
             total_loss.backward()
             optimizer.step()
             
-            # Create log entry
-            actions = {
-                "role": int(chosen_role_idx.item()),
-                "strategy": int(chosen_strategy_idx.item()),
-                "format": int(chosen_format_idx.item()),
-                "memory": int(chosen_memory_idx.item()),
-                "tone": int(chosen_tone_idx.item())
-            }
-            
+            # Log episode data
+            prompt_components_description = f"C: {concept_name}, S: {style_name}"
             log = EpisodeLog(
                 episode=current_episode,
                 reward=reward,
-                actions=actions,
-                prompt=f"Concept: {concept_name}, Style: {style_name}",
-                response=f"Role: {TEACHER_ROLES[actions['role']]}, Strategy: {THEORETICAL_STRATEGIES[actions['strategy']]}, Format: {ANSWER_FORMATS[actions['format']]}, Memory: {MEMORY_MODES[actions['memory']]}, Tone: {TONE_STYLES[actions['tone']]}"
+                actions=actions_dict_for_log_and_prompt,
+                prompt_components=prompt_components_description,
+                full_prompt_text=logged_full_prompt,
+                tutoring_response_text=logged_tutoring_response
             )
-            
             logs.append(log)
+            
             recent_rewards.append(reward)
-            if len(recent_rewards) > 10:
-                recent_rewards.pop(0)
+            if len(recent_rewards) > 10: recent_rewards.pop(0)
             
             # Track best model
             if reward > best_reward:
