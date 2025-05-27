@@ -1,4 +1,4 @@
 #!/bin/bash
 uv sync
 cd api && uv sync && cd ..
-cd app && pnpm install && cd ..
+cd app && pnpm install && cd .. 
