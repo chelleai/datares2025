@@ -1,0 +1,103 @@
+CONCEPT_BINS = """
+- Pre-Algebra / Foundations
+- Algebra I
+- Algebra II
+- Geometry
+- Trigonometry
+- Pre-Calculus / Math Analysis
+- Calculus I (Differential)
+- Calculus II (Integral)
+- Calculus III (Multivariable)
+- Linear Algebra
+- Differential Equations
+- Discrete Math
+- Probability & Statistics
+- Number Theory
+- Physics: Mechanics
+- Physics: Waves & Optics
+- Physics: Electricity & Magnetism
+- Physics: Thermodynamics
+- Physics: Modern / Quantum Intro
+- General Chemistry
+- Organic Chemistry
+- Inorganic / Materials Chemistry
+- Physical Chemistry
+- Biochemistry
+- Biology: Cell & Molecular
+- Biology: Genetics
+- Biology: Anatomy & Physiology
+- Biology: Ecology & Evolution
+- Earth & Space Science
+- Environmental Science
+- Intro Programming
+- Object-Oriented Programming
+- Data Structures & Algorithms
+- Web Development
+- Databases & SQL
+- Operating Systems / Systems Programming
+- Computer Networks
+- Cybersecurity
+- Software Engineering
+- AI / Machine Learning
+- Data Science & Analytics
+- Computer Graphics & Vision
+- Theory of Computation
+- Mechanical Engineering Basics
+- Electrical / Electronics
+- Civil / Structural Engineering
+- Chemical Engineering
+- Biomedical Engineering
+- Materials Science
+- Aerospace Fundamentals
+- Industrial & Systems Engineering
+- World History
+- U.S. History
+- European History
+- Government & Civics
+- Economics: Micro
+- Economics: Macro
+- Psychology: Intro
+- Sociology
+- Human Geography
+- Philosophy: Ethics & Logic
+- Anthropology
+- Business & Entrepreneurship
+- English Composition & Rhetoric
+- Literary Analysis
+- Creative Writing
+- Speech & Debate
+- English Grammar & Usage
+- World Languages: Spanish, French, Mandarin, Other
+- Music Theory
+- Visual Arts: 2D/3D
+- Photography & Digital Media
+- Theatre & Drama
+- Dance
+- Film Studies
+- Health Education
+- Physical Education / Kinesiology
+- Personal Finance
+- Career & Technical Education
+- Miscellaneous / Other"""
+
+CONTEXT_BINS = """
+- Textbook chapter
+- Lecture notes
+- Lab manual section
+- Problem-set solutions key
+- Research article summary
+- Literature review draft
+- Class syllabus
+- Slide-deck transcript / speaker notes
+- Annotated code sample with docstrings
+- Experiment write-up (methods & results)
+- Dataset description / data dictionary
+- Reading guide with discussion questions
+- Case-study packet
+- Glossary of key terms
+- Historical document analysis
+- Primary-source excerpt with annotations
+- Project design specification
+- Statistical analysis report
+- Language vocabulary list with examples
+- Study group collaborative notes"""

@@ -105,8 +105,10 @@ def build_state_tensor(concept: str, style: str, conversation: List[str] = None)
     
     return torch.cat([c_vec, s_vec, conv_vec])
 
+# Remove the format_concepts_for_prompt function since we're not using raw concepts anymore
+
 def assemble_prompt(actions: Dict[str, int],
-                    concept: str,
+                    concept_bin: str,  # Changed: now takes the binned category directly
                     style: str,
                     last_q: str,
                     conversation: List[str] = None) -> str:
@@ -124,8 +126,8 @@ def assemble_prompt(actions: Dict[str, int],
     else:
         conversation_text = "No previous conversation history."
     
-    # Add conversation parameter to the template
-    filled_blocks['concept'] = concept
+    # Use the binned concept category directly
+    filled_blocks['concept'] = concept_bin
     filled_blocks['learning_style'] = style
     filled_blocks['last_question'] = last_q
     filled_blocks['conversation'] = conversation_text
@@ -239,12 +241,32 @@ def get_baseline_response(prompt: str) -> str:
 def evaluate_response(prompt: str, answer_text: str) -> float:
     return evaluate_response_strict(prompt, answer_text)
 
-def bin_concept(concept: str) -> str:
+def bin_concepts(concepts: List[Dict[str, str]]) -> str:
+    """Bin multiple concepts together into a single category"""
+    if not concepts:
+        return CONCEPT_BIN_LIST[-1] if CONCEPT_BIN_LIST else "Miscellaneous / Other"
+    
+    # Combine all terms and definitions for comprehensive binning
+    combined_text = []
+    for concept in concepts:
+        combined_text.append(f"Term: {concept['term']}")
+        combined_text.append(f"Definition: {concept['definition']}")
+    
+    combined_concept_text = " | ".join(combined_text)
+    
     concept_list_str = "\n".join([f"- {bin_name}" for bin_name in CONCEPT_BIN_LIST])
     
     response = call_llm_with_retry(
         system_prompt="You are an expert in educational psychology.",
-        user_prompt=f"Please categorize the following concept into one of these bins:\n{concept_list_str}\n\nConcept: {concept}\n\nReturn only the bin name that best matches the concept.",
+        user_prompt=f"""Please categorize the following concepts into one of these bins:
+{concept_list_str}
+
+Concepts to categorize:
+{combined_concept_text}
+
+These concepts are related and should be categorized together. Look at all the terms and definitions to determine the best single category that encompasses all of them.
+
+Return only the bin name that best matches these concepts.""",
         retries=1
     )
     
@@ -255,7 +277,7 @@ def bin_concept(concept: str) -> str:
             if bin_name.lower() in response_lower:
                 return bin_name
     
-    return CONCEPT_BIN_LIST[-1] if CONCEPT_BIN_LIST else "Miscellaneous / Other"  # Default to last bin
+    return CONCEPT_BIN_LIST[-1] if CONCEPT_BIN_LIST else "Miscellaneous / Other"
 
 def bin_learning_style(style: str) -> str:
     style_list_str = "\n".join([f"- {bin_name}" for bin_name in LEARNING_STYLE_BIN_LIST])
@@ -273,7 +295,7 @@ def bin_learning_style(style: str) -> str:
             if bin_name.lower() in response_lower:
                 return bin_name
     
-    return LEARNING_STYLE_BIN_LIST[-1] if LEARNING_STYLE_BIN_LIST else "Multimodal/Flexible (catch-all)"  # Default to last bin
+    return LEARNING_STYLE_BIN_LIST[-1] if LEARNING_STYLE_BIN_LIST else "Multimodal/Flexible (catch-all)"
 
 # Policy Network with dropout for better generalization
 class PromptPolicy(nn.Module):    
@@ -346,13 +368,14 @@ class EpisodeLog:
     concept_bin: str
     learning_style_bin: str
     conversation_length: int
-    epsilon: float   
+    epsilon: float
+    concepts_count: int  # NEW: Track how many concepts were used
     
     def to_dict(self):
         return asdict(self)
 
 # Real-time logging function
-def save_episode_log(log: EpisodeLog, filename: str = "training_logs.jsonl"):
+def save_episode_log(log: EpisodeLog, filename: str):
     with open(filename, "a") as f:  # Use append mode
         f.write(json.dumps(log.to_dict()) + "\n")
 
@@ -360,7 +383,7 @@ def save_episode_log(log: EpisodeLog, filename: str = "training_logs.jsonl"):
 def run_episode(policy: PromptPolicy,
                 optimizer: torch.optim.Optimizer,
                 baseline: float,
-                concept: str,
+                concepts: List[Dict[str, str]],
                 learning_style: str,
                 conversation: List[str],
                 episode: int,
@@ -376,8 +399,8 @@ def run_episode(policy: PromptPolicy,
     else:
         STUDENT_QUESTION = "No previous questions."
 
-    # Bin the concept and learning style dynamically
-    concept_bin = bin_concept(concept)
+    # Bin the concepts and learning style dynamically
+    concept_bin = bin_concepts(concepts)
     learning_style_bin = bin_learning_style(learning_style)
     
     # State tensor from concept, learning style, and conversation
@@ -409,8 +432,8 @@ def run_episode(policy: PromptPolicy,
         log_probs.append(dist.log_prob(action_tensor))  # Use tensor directly
         entropies.append(dist.entropy())
     
-    # Assemble prompt with selected actions
-    prompt = assemble_prompt(actions, concept, learning_style, STUDENT_QUESTION, conversation)
+    # Assemble prompt with selected actions - now uses binned concept
+    prompt = assemble_prompt(actions, concept_bin, learning_style, STUDENT_QUESTION, conversation)
     
     # Get tutoring response from LLM
     response = get_tutoring_response(prompt)
@@ -420,7 +443,9 @@ def run_episode(policy: PromptPolicy,
     if USE_COMPARATIVE_GRADING:
         if baseline_responses is None:
             baseline_responses = {}
-        cache_key = f"{concept}_{learning_style}"
+        # Create cache key from all concept terms
+        concept_terms = [concept["term"] for concept in concepts]
+        cache_key = f"{'_'.join(concept_terms)}_{learning_style}"
         if cache_key not in baseline_responses:
             baseline_responses[cache_key] = get_baseline_response(prompt)
         baseline_response = baseline_responses[cache_key]
@@ -458,15 +483,10 @@ def run_episode(policy: PromptPolicy,
         learning_style_bin=learning_style_bin,
         conversation_length=len(conversation) if conversation else 0,
         epsilon=epsilon,
+        concepts_count=len(concepts),  # NEW: Track concept count
     )
     
     return reward, log
-
-def save_logs(logs: List[EpisodeLog], filename: str = "training_logs.jsonl"):
-    with open(filename, "w") as f:
-        for log in logs:
-            f.write(json.dumps(log.to_dict()) + "\n")
-    print(f"Logs saved to {filename}")
 
 # Logging with raw rewards and exploration tracking
 def print_epoch_summary(episode: int, reward: float, recent_rewards: List[float], best_reward: float, epsilon: float, logs: List[EpisodeLog]):
@@ -479,11 +499,19 @@ def print_epoch_summary(episode: int, reward: float, recent_rewards: List[float]
     print(f"Episode {episode}/{N_EPISODES} | Reward: {reward:.2f} | Raw: {logs[-1].raw_reward:.2f} | "
           f"Avg: {avg_reward:.2f} | Raw Avg: {avg_raw_reward:.2f} | Best: {best_reward:.2f} | ε: {epsilon:.3f}")
 
-def train_policy(concept: str = "linear algebra", 
+def train_policy(concepts: List[Dict[str, str]] = None, 
                 learning_style: str = "step by step with examples", 
-                conversation: List[str] = None):
+                conversation: List[str] = None,
+                filename: str = "training_logs.jsonl"):
     torch.manual_seed(42)
     random.seed(42)
+    
+    # Default concepts if none provided
+    if concepts is None:
+        concepts = [{
+            "term": "linear algebra",
+            "definition": "Linear algebra is the branch of mathematics concerning linear equations, linear functions, and their representations through matrices and vector spaces."
+        }]
     
     if conversation is None:
         conversation = []
@@ -498,19 +526,16 @@ def train_policy(concept: str = "linear algebra",
     best_episode = 0
     baseline_responses = {}  # Cache for baseline responses
     
-    # NEW: Clear the log file at the start of training
-    log_filename = "training_logs.jsonl"
-    if os.path.exists(log_filename):
-        os.remove(log_filename)
-    
+    # Display concept information
+    concept_terms = [concept["term"] for concept in concepts]
     print(f"Starting training with {N_EPISODES} episodes...")
-    print(f"Concept: {concept}")
+    print(f"Concepts ({len(concepts)}): {', '.join(concept_terms)}")
     print(f"Learning Style: {learning_style}")
     print(f"Conversation length: {len(conversation)}")
     print(f"Exploration: {EPSILON_START} -> {EPSILON_END}")
     print(f"Reward scaling: {REWARD_SCALE_FACTOR}")
     print(f"Entropy weight: {ENTROPY_LAMBDA}")
-    print(f"Real-time logging to: {log_filename}")
+    print(f"Real-time logging to: {filename}")
     print("="*60)
     
     for episode in range(1, N_EPISODES + 1):
@@ -518,7 +543,7 @@ def train_policy(concept: str = "linear algebra",
             policy=policy,
             optimizer=optimizer,
             baseline=baseline,
-            concept=concept,
+            concepts=concepts,
             learning_style=learning_style,
             conversation=conversation,
             episode=episode,
@@ -539,28 +564,27 @@ def train_policy(concept: str = "linear algebra",
             best_reward = reward
             best_episode = episode
         
-        # NEW: Save log immediately after each episode
-        save_episode_log(log, log_filename)
-        
+        # Save log immediately after each episode
+        save_episode_log(log, filename)
+
         # Track logs and save every now and then with better logging
         if episode % LOG_INTERVAL == 0:
             print_epoch_summary(episode, reward, recent_rewards, best_reward, log.epsilon, logs)
     
-    # Final save as backup (all logs at once)
-    save_logs(logs, "training_logs_final.jsonl")
-    
     print(f"\nTraining complete")
     print(f"Best reward: {best_reward:.2f} at episode {best_episode}")
     print(f"Final exploration rate: {logs[-1].epsilon:.3f}")
-    print(f"Real-time logs saved to: {log_filename}")
-    print(f"Final backup logs saved to: training_logs_final.jsonl")
+    print(f"Real-time logs saved to: {filename}")
 
     # Final evaluation
     print("\nFinal Evaluation:")
     
     # Bin the inputs for final evaluation
-    concept_bin = bin_concept(concept)
+    concept_bin = bin_concepts(concepts)
     learning_style_bin = bin_learning_style(learning_style)
+    
+    print(f"Concepts binned to: {concept_bin}")
+    print(f"Learning style binned to: {learning_style_bin}")
     
     # Get the final student question
     if conversation:
@@ -578,24 +602,33 @@ def train_policy(concept: str = "linear algebra",
     for key, idx in actions.items():
         print(f"{key}: {BLOCK_OPTIONS[key][idx]}")
     
-    # Generate example prompt with best configuration
-    best_prompt = assemble_prompt(actions, concept, learning_style, STUDENT_QUESTION, conversation)
+    # Generate example prompt with best configuration - now uses binned concept
+    best_prompt = assemble_prompt(actions, concept_bin, learning_style, STUDENT_QUESTION, conversation)
     print("\nExample of best prompt template:")
     print(best_prompt)
     
     return policy, logs
 
 def main():
-    # Default parameters
-    concept = "linear algebra"
+    # Default parameters with multiple concepts
+    concepts = [
+        {
+            "term": "eigenvalue",
+            "definition": "A scalar value that indicates how much a corresponding eigenvector is scaled during a linear transformation."
+        },
+        {
+            "term": "eigenvector", 
+            "definition": "A non-zero vector that changes only by a scalar factor when a linear transformation is applied to it."
+        },
+        {
+            "term": "basis",
+            "definition": "A set of linearly independent vectors that span the entire vector space."
+        }
+    ]
     learning_style = "step by step with examples"
     conversation = []
     
-    # If you want to run with binning step, uncomment the following lines:
-    # concept = bin_concept(concept)
-    # learning_style = bin_learning_style(learning_style)
-
-    train_policy(concept, learning_style, conversation)
+    train_policy(concepts, learning_style, conversation, filename="training_logs.jsonl")
 
 if __name__ == "__main__":
     main()

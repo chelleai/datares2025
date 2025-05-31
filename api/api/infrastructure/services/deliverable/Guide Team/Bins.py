@@ -13,20 +13,20 @@ CONCEPT_BINS = """
 - Discrete Math
 - Probability & Statistics
 - Number Theory
-- Physics – Mechanics
-- Physics – Waves & Optics
-- Physics – Electricity & Magnetism
-- Physics – Thermodynamics
-- Physics – Modern / Quantum Intro
+- Physics: Mechanics
+- Physics: Waves & Optics
+- Physics: Electricity & Magnetism
+- Physics: Thermodynamics
+- Physics: Modern / Quantum Intro
 - General Chemistry
 - Organic Chemistry
 - Inorganic / Materials Chemistry
 - Physical Chemistry
 - Biochemistry
-- Biology – Cell & Molecular
-- Biology – Genetics
-- Biology – Anatomy & Physiology
-- Biology – Ecology & Evolution
+- Biology: Cell & Molecular
+- Biology: Genetics
+- Biology: Anatomy & Physiology
+- Biology: Ecology & Evolution
 - Earth & Space Science
 - Environmental Science
 - Intro Programming
@@ -54,12 +54,12 @@ CONCEPT_BINS = """
 - U.S. History
 - European History
 - Government & Civics
-- Economics – Micro
-- Economics – Macro
-- Psychology – Intro
+- Economics: Micro
+- Economics: Macro
+- Psychology: Intro
 - Sociology
 - Human Geography
-- Philosophy – Ethics & Logic
+- Philosophy: Ethics & Logic
 - Anthropology
 - Business & Entrepreneurship
 - English Composition & Rhetoric
@@ -67,9 +67,9 @@ CONCEPT_BINS = """
 - Creative Writing
 - Speech & Debate
 - English Grammar & Usage
-- World Languages – Spanish, French, Mandarin, Other
+- World Languages: Spanish, French, Mandarin, Other
 - Music Theory
-- Visual Arts – 2D/3D
+- Visual Arts: 2D/3D
 - Photography & Digital Media
 - Theatre & Drama
 - Dance
