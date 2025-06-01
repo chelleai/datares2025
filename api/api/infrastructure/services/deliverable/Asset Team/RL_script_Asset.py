@@ -13,10 +13,10 @@ from torch.distributions import Categorical
 from dotenv import load_dotenv
 
 # Load variables from helper files
-from Bins import CONCEPT_BINS, LEARNING_STYLE_BINS
-from Block_options import BLOCK_OPTIONS
-from Prompt_template import PROMPT_TEMPLATE
-from Rubric import RUBRIC_TEXT
+from Bins_Asset import CONCEPT_BINS, CONTEXT_BINS
+from Block_options_Asset import BLOCK_OPTIONS
+from Prompt_template_Asset import PROMPT_TEMPLATE
+from Rubric_Asset import EVALUATION_METRIC
 
 # Load OpenAPI key
 load_dotenv()
@@ -27,24 +27,24 @@ client = openai.OpenAI(api_key=openai.api_key)
 DEVICE = "cpu" 
 LR = 3e-4  
 HIDDEN_SIZE = 64  
-ENTROPY_LAMBDA = 0.05  # Improved for more exploration
+ENTROPY_LAMBDA = 0.05  
 BASELINE_BETA = 0.9 
 N_EPISODES = 50  
-TEMPERATURE_LLM = 0.3  # Improved for more diverse responses
+TEMPERATURE_LLM = 0.3  
 MODEL_NAME_LLM = "gpt-4o-mini"  
 EVAL_RETRIES = 3  
 SAVE_INTERVAL = 10  
 LOG_INTERVAL = 5 
 
-# Improved Exploration Parameters
-EPSILON_START = 0.3  # Start with 30% random actions
-EPSILON_END = 0.05   # End with 5% random actions
-EPSILON_DECAY = 0.995  # How fast to decay exploration
+# Exploration Parameters
+EPSILON_START = 0.3  
+EPSILON_END = 0.05   
+EPSILON_DECAY = 0.995  
 
-# Improved Reward scaling parameters
-REWARD_SCALE_FACTOR = 0.8  # Scale down rewards to avoid saturation
-REWARD_NOISE_STD = 2.0     # Add noise to prevent identical rewards
-USE_COMPARATIVE_GRADING = True  # Compare against baseline responses
+# Reward scaling parameters
+REWARD_SCALE_FACTOR = 0.8  
+REWARD_NOISE_STD = 2.0     
+USE_COMPARATIVE_GRADING = True  
 
 # Parse bins from the imported strings
 def parse_bins(bin_string: str) -> List[str]:
@@ -52,19 +52,18 @@ def parse_bins(bin_string: str) -> List[str]:
     bins = []
     for line in lines:
         line = line.strip()
-        if line:  # Ensure the line is not empty
-            # Remove any leading bullets or dashes
+        if line:  
             clean_line = line.lstrip('- ').strip()
             bins.append(clean_line)
     return bins
 
 # Parse the actual bins
 CONCEPT_BIN_LIST = parse_bins(CONCEPT_BINS)
-LEARNING_STYLE_BIN_LIST = parse_bins(LEARNING_STYLE_BINS)
+CONTEXT_BIN_LIST = parse_bins(CONTEXT_BINS)
 
 # Create mappings
 BIN2IDX_CONCEPT = {b: i for i, b in enumerate(CONCEPT_BIN_LIST)}
-BIN2IDX_STYLE = {b: i for i, b in enumerate(LEARNING_STYLE_BIN_LIST)}
+BIN2IDX_CONTEXT = {b: i for i, b in enumerate(CONTEXT_BIN_LIST)}
 
 # Get keys and sizes for block options
 BLOCK_KEYS = list(BLOCK_OPTIONS.keys())
@@ -76,61 +75,178 @@ def one_hot(index: int, size: int) -> torch.Tensor:
     v[index] = 1.0
     return v
 
-def encode_conversation(conversation: List[str], max_length: int = 512) -> torch.Tensor:
-    # Simple encoding: use length and word count features
-    if not conversation:
-        return torch.zeros(4, device=DEVICE)
+def build_state_tensor(concept_bin: str, context_bin: str, terms_count: int = 0, citations_count: int = 0) -> torch.Tensor:
+    c_vec = one_hot(BIN2IDX_CONCEPT.get(concept_bin, 0), len(CONCEPT_BIN_LIST))
+    ctx_vec = one_hot(BIN2IDX_CONTEXT.get(context_bin, 0), len(CONTEXT_BIN_LIST))
     
-    # Join all conversation turns
-    full_text = " ".join(conversation)
-    
-    # Extract simple features
-    features = torch.tensor([
-        len(conversation),  # Number of turns
-        len(full_text),     # Total character count
-        len(full_text.split()),  # Total word count
-        len(conversation) / max(len(full_text.split()), 1)  # Avg words per turn
+    # Add document features
+    doc_features = torch.tensor([
+        terms_count,     # Number of terms extracted
+        citations_count  # Number of citations extracted
     ], device=DEVICE, dtype=torch.float32)
     
-    return features
+    return torch.cat([c_vec, ctx_vec, doc_features])
 
-def build_state_tensor(concept: str, style: str, conversation: List[str] = None) -> torch.Tensor:
-    c_vec = one_hot(BIN2IDX_CONCEPT.get(concept, 0), len(CONCEPT_BIN_LIST))
-    s_vec = one_hot(BIN2IDX_STYLE.get(style, 0), len(LEARNING_STYLE_BIN_LIST))
-    
-    # Add conversation encoding
-    if conversation is None:
-        conversation = []
-    conv_vec = encode_conversation(conversation)
-    
-    return torch.cat([c_vec, s_vec, conv_vec])
+def read_markdown_file(file_path: str) -> str:
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error reading file {file_path}: {e}")
+        return ""
 
-# Remove the format_concepts_for_prompt function since we're not using raw concepts anymore
+def bin_document_concept(markdown_content: str) -> str:
+    concept_list_str = "\n".join([f"- {bin_name}" for bin_name in CONCEPT_BIN_LIST])
+    
+    # Truncate content if too long for API
+    content_preview = markdown_content[:2000] + "..." if len(markdown_content) > 2000 else markdown_content
+    
+    response = call_llm_with_retry(
+        system_prompt="You are an expert in educational content analysis.",
+        user_prompt=f"""Please categorize the following document content into one of these subject bins:
+{concept_list_str}
+
+Document content:
+{content_preview}
+
+Analyze the content and determine which academic subject it most closely relates to. Return only the bin name that best matches the document's subject matter.""",
+        retries=2
+    )
+    
+    if response:
+        response_lower = response.lower()
+        for bin_name in CONCEPT_BIN_LIST:
+            if bin_name.lower() in response_lower:
+                return bin_name
+    
+    return CONCEPT_BIN_LIST[-1] if CONCEPT_BIN_LIST else "Miscellaneous / Other"
+
+def bin_document_context(markdown_content: str) -> str:
+    context_list_str = "\n".join([f"- {bin_name}" for bin_name in CONTEXT_BIN_LIST])
+    
+    # Analyze document structure and style
+    content_preview = markdown_content[:1500] + "..." if len(markdown_content) > 1500 else markdown_content
+    
+    response = call_llm_with_retry(
+        system_prompt="You are an expert in document type classification.",
+        user_prompt=f"""Please categorize the following document by its source type:
+{context_list_str}
+
+Document content:
+{content_preview}
+
+Look at the structure, formatting, style, and content to determine what type of educational material this is. Return only the bin name that best matches the document type.""",
+        retries=2
+    )
+    
+    if response:
+        response_lower = response.lower()
+        for bin_name in CONTEXT_BIN_LIST:
+            if bin_name.lower() in response_lower:
+                return bin_name
+    
+    return CONTEXT_BIN_LIST[-1] if CONTEXT_BIN_LIST else "Study group collaborative notes"
+
+def extract_terms_and_citations(markdown_content: str) -> Tuple[List[Dict[str, str]], List[str]]:    
+    extraction_prompt = f"""
+Analyze the following document and extract:
+
+1. KEY TERMS: Important concepts, terminology, or vocabulary with their definitions (if provided in the text)
+2. CITATIONS: Important quotes, statistics, references, or notable statements
+
+Document content:
+{markdown_content}
+
+Please respond in this exact JSON format:
+{{
+    "terms": [
+        {{"term": "concept name", "definition": "definition from text or empty string if not provided"}},
+        {{"term": "another concept", "definition": "its definition or empty string"}}
+    ],
+    "citations": [
+        "Important quote or statistic from the text",
+        "Another significant reference or statement"
+    ]
+}}
+
+Extract ALL relevant terms and citations. Include technical terms, key concepts, important names, theories, formulas, etc. For definitions, use the exact text from the document when available.
+"""
+    
+    response = call_llm_with_retry(
+        system_prompt="You are an expert at extracting educational content from documents. Always respond with valid JSON.",
+        user_prompt=extraction_prompt,
+        retries=3
+    )
+    
+    if not response:
+        return [], []
+    
+    try:
+        # Parse the JSON response
+        data = json.loads(response)
+        terms = data.get("terms", [])
+        citations = data.get("citations", [])
+        
+        # Validate and clean the data
+        cleaned_terms = []
+        for term in terms:
+            if isinstance(term, dict) and "term" in term and "definition" in term:
+                cleaned_terms.append({
+                    "term": str(term["term"]).strip(),
+                    "definition": str(term["definition"]).strip()
+                })
+        
+        cleaned_citations = []
+        for citation in citations:
+            if isinstance(citation, str) and citation.strip():
+                cleaned_citations.append(citation.strip())
+        
+        print(f"Extracted {len(cleaned_terms)} terms and {len(cleaned_citations)} citations")
+        return cleaned_terms, cleaned_citations
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parsing extraction response: {e}")
+        print(f"Response was: {response[:200]}...")
+        return [], []
+
+def format_terms_for_prompt(terms: List[Dict[str, str]]) -> str:
+    if not terms:
+        return "No key terms extracted"
+    
+    formatted_terms = []
+    for term in terms:
+        if term["definition"]:
+            formatted_terms.append(f"- {term['term']}: {term['definition']}")
+        else:
+            formatted_terms.append(f"- {term['term']}")
+    
+    return "\n".join(formatted_terms)
+
+def format_citations_for_prompt(citations: List[str]) -> str:
+    if not citations:
+        return "No key citations extracted"
+    
+    formatted_citations = []
+    for i, citation in enumerate(citations, 1):
+        formatted_citations.append(f"{i}. {citation}")
+    
+    return "\n".join(formatted_citations)
 
 def assemble_prompt(actions: Dict[str, int],
-                    concept_bin: str,  # Changed: now takes the binned category directly
-                    style: str,
-                    last_q: str,
-                    conversation: List[str] = None) -> str:
+                    concept_bin: str,
+                    context_bin: str,
+                    terms: List[Dict[str, str]],
+                    citations: List[str]) -> str:
+    """Assemble the study guide generation prompt"""
     filled_blocks = {
         k: BLOCK_OPTIONS[k][idx] for k, idx in actions.items()
     }
     
-    # Format conversation history
-    if conversation is None:
-        conversation = []
-    
-    conversation_text = ""
-    if conversation:
-        conversation_text = "\n".join([f"Turn {i+1}: {turn}" for i, turn in enumerate(conversation)])
-    else:
-        conversation_text = "No previous conversation history."
-    
-    # Use the binned concept category directly
-    filled_blocks['concept'] = concept_bin
-    filled_blocks['learning_style'] = style
-    filled_blocks['last_question'] = last_q
-    filled_blocks['conversation'] = conversation_text
+    # Add all required template variables
+    filled_blocks['concept_bin'] = concept_bin
+    filled_blocks['context_bin'] = context_bin
+    filled_blocks['terms'] = format_terms_for_prompt(terms)
+    filled_blocks['citations'] = format_citations_for_prompt(citations)
     
     return PROMPT_TEMPLATE.format(**filled_blocks)
 
@@ -154,64 +270,70 @@ def call_llm_with_retry(system_prompt: str, user_prompt: str, retries: int = EVA
                 print(f"API call failed after {retries} attempts: {e}")
                 return None
 
-def get_tutoring_response(prompt: str) -> str:
+def get_study_guide_response(prompt: str) -> str:
     return call_llm_with_retry(
-        system_prompt="You are a helpful AI tutor.",
+        system_prompt="You are an expert educational content creator. Generate comprehensive study guides that include all relevant terms and citations from the source material.",
         user_prompt=prompt
-    ) or "Failed to generate response."
+    ) or "Failed to generate study guide."
 
 def extract_score_from_feedback(feedback: str) -> float:
     try:
         import re
         numbers = re.findall(r'\b\d+(?:\.\d+)?\b', feedback)
         
-        # If we find numbers take the last one which is likely the final score
         if numbers:
             score = float(numbers[-1])
             return min(max(score, 0), 100)
         
-        return 50.00  # Default score if no numbers found
+        return 50.00  
     except Exception as e:
         print(f"Error extracting score: {e}")
-        return 50.00  # Default score if parsing fails
+        return 50.00  
 
-# Stricter evaluation function
-def evaluate_response_strict(prompt: str, answer_text: str, baseline_response: str = None) -> float:
-    # Create a more demanding evaluation prompt
+def evaluate_response_strict(prompt: str, answer_text: str, terms: List[Dict[str, str]], citations: List[str], baseline_response: str = None) -> float:    
+    # Format terms and citations for evaluation
+    terms_text = format_terms_for_prompt(terms)
+    citations_text = format_citations_for_prompt(citations)
+    
     strict_evaluation_prompt = f"""
 You are an EXTREMELY STRICT educational content evaluator. Be highly critical and look for ANY flaws.
 
-Rubric (judge harshly):
-{RUBRIC_TEXT}
+Evaluation Rubric:
+{EVALUATION_METRIC}
 
 Original Prompt:
 {prompt}
 
-Assistant Response to Evaluate:
+Expected Terms to Include:
+{terms_text}
+
+Expected Citations to Include:
+{citations_text}
+
+Generated Study Guide Response:
 {answer_text}
 
 STRICT EVALUATION INSTRUCTIONS:
-1. Be very critical - a score of 100 should be EXTREMELY rare (only for perfect responses)
-2. Look for ANY unclear explanations, missing examples, poor structure, etc.
-3. Deduct points heavily for:
-   - Any confusing language
-   - Missing learning style adaptation
-   - Lack of engaging tone
-   - Poor examples or analogies
-   - Missing connections to related concepts
-   - Inadequate feedback solicitation
-4. A "good" response should score 60-75
-5. An "excellent" response should score 76-85
-6. Only truly exceptional responses deserve 86+
-7. Responses with any significant flaws should score below 60
+1. Check if ALL extracted terms are adequately covered in the response
+2. Verify that relevant citations are incorporated appropriately
+3. Evaluate accuracy, completeness, citation quality, relevance, and clarity
+4. Be very critical - a score of 100 should be EXTREMELY rare
+5. Deduct heavily for:
+   - Missing key terms from the extracted list
+   - Failure to incorporate important citations
+   - Inaccurate definitions or explanations
+   - Poor organization or unclear presentation
+6. A "good" response should score 60-75
+7. An "excellent" response should score 76-85
+8. Only truly exceptional responses deserve 86+
 
 {f'BASELINE COMPARISON: Compare this response to this baseline: {baseline_response}' if baseline_response else ''}
 
-Provide a detailed critique and then give a STRICT numerical score between 0-100. Remember: be harsh!
+Provide a detailed critique focusing on term coverage and citation usage, then give a STRICT numerical score between 0-100. Remember: be harsh!
 """
     
     grader_feedback = call_llm_with_retry(
-        system_prompt="You are an extremely strict educational content evaluator who rarely gives high scores.",
+        system_prompt="You are an extremely strict educational content evaluator who focuses on completeness and accuracy.",
         user_prompt=strict_evaluation_prompt
     )
     
@@ -220,101 +342,37 @@ Provide a detailed critique and then give a STRICT numerical score between 0-100
     
     score = extract_score_from_feedback(grader_feedback)
     
-    # Apply reward scaling to prevent saturation
+    # Apply reward scaling and noise
     scaled_score = score * REWARD_SCALE_FACTOR
-    
-    # Add small amount of noise to prevent identical rewards
     noise = random.gauss(0, REWARD_NOISE_STD)
     final_score = max(0, min(100, scaled_score + noise))
     
     return final_score
 
-# Generate baseline response for comparison
 def get_baseline_response(prompt: str) -> str:
-    simple_prompt = f"Briefly explain the concept mentioned in this educational prompt: {prompt[:200]}..."
+    """Get a simple baseline response for comparison"""
+    simple_prompt = f"Create a basic study guide for the content mentioned in this prompt: {prompt[:300]}..."
     return call_llm_with_retry(
-        system_prompt="You are a basic tutor. Give a simple, short explanation.",
+        system_prompt="You are a basic study guide creator. Provide simple, brief explanations.",
         user_prompt=simple_prompt
-    ) or "Basic explanation."
+    ) or "Basic study guide."
 
-# Keep original evaluate_response for compatibility, but make it stricter
-def evaluate_response(prompt: str, answer_text: str) -> float:
-    return evaluate_response_strict(prompt, answer_text)
-
-def bin_concepts(concepts: List[Dict[str, str]]) -> str:
-    """Bin multiple concepts together into a single category"""
-    if not concepts:
-        return CONCEPT_BIN_LIST[-1] if CONCEPT_BIN_LIST else "Miscellaneous / Other"
-    
-    # Combine all terms and definitions for comprehensive binning
-    combined_text = []
-    for concept in concepts:
-        combined_text.append(f"Term: {concept['term']}")
-        combined_text.append(f"Definition: {concept['definition']}")
-    
-    combined_concept_text = " | ".join(combined_text)
-    
-    concept_list_str = "\n".join([f"- {bin_name}" for bin_name in CONCEPT_BIN_LIST])
-    
-    response = call_llm_with_retry(
-        system_prompt="You are an expert in educational psychology.",
-        user_prompt=f"""Please categorize the following concepts into one of these bins:
-{concept_list_str}
-
-Concepts to categorize:
-{combined_concept_text}
-
-These concepts are related and should be categorized together. Look at all the terms and definitions to determine the best single category that encompasses all of them.
-
-Return only the bin name that best matches these concepts.""",
-        retries=1
-    )
-    
-    if response:
-        # Find the best matching bin
-        response_lower = response.lower()
-        for bin_name in CONCEPT_BIN_LIST:
-            if bin_name.lower() in response_lower:
-                return bin_name
-    
-    return CONCEPT_BIN_LIST[-1] if CONCEPT_BIN_LIST else "Miscellaneous / Other"
-
-def bin_learning_style(style: str) -> str:
-    style_list_str = "\n".join([f"- {bin_name}" for bin_name in LEARNING_STYLE_BIN_LIST])
-    
-    response = call_llm_with_retry(
-        system_prompt="You are an expert in educational psychology.",
-        user_prompt=f"Please categorize the following learning style into one of these bins:\n{style_list_str}\n\nLearning style: {style}\n\nReturn only the bin name that best matches the learning style.",
-        retries=1
-    )
-    
-    if response:
-        # Find the best matching bin
-        response_lower = response.lower()
-        for bin_name in LEARNING_STYLE_BIN_LIST:
-            if bin_name.lower() in response_lower:
-                return bin_name
-    
-    return LEARNING_STYLE_BIN_LIST[-1] if LEARNING_STYLE_BIN_LIST else "Multimodal/Flexible (catch-all)"
-
-# Policy Network with dropout for better generalization
-class PromptPolicy(nn.Module):    
+# Policy Network
+class DocumentPromptPolicy(nn.Module):    
     def __init__(self):
         super().__init__()
-        # Calculate input dimension dynamically
-        input_dim = len(CONCEPT_BIN_LIST) + len(LEARNING_STYLE_BIN_LIST) + 4  # +4 for conversation features
+        # Input: concept bins + context bins + document features
+        input_dim = len(CONCEPT_BIN_LIST) + len(CONTEXT_BIN_LIST) + 2  # +2 for terms_count, citations_count
         
-        # Add dropout for regularization
         self.trunk = nn.Sequential(
             nn.Linear(input_dim, HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Dropout(0.1),  # Add dropout
+            nn.Dropout(0.1),
             nn.Linear(HIDDEN_SIZE, HIDDEN_SIZE),
             nn.ReLU(),
-            nn.Dropout(0.1),  # Add dropout
+            nn.Dropout(0.1),
         )
         
-        # output head for each block type
         self.heads = nn.ModuleList(
             [nn.Linear(HIDDEN_SIZE, size) for size in BLOCK_SIZES]
         )
@@ -333,13 +391,10 @@ class PromptPolicy(nn.Module):
             entropies = []
             
             for i, (key, logit) in enumerate(zip(BLOCK_KEYS, logits)):
-                # Add epsilon-greedy exploration
                 if not deterministic and random.random() < epsilon:
-                    # Random action for exploration
                     action_idx = torch.randint(0, len(logit), (1,)).item()
                     dist = Categorical(logits=logit)
                 else:
-                    # Policy-based action
                     dist = Categorical(logits=logit)
                     if deterministic:
                         action_idx = torch.argmax(logit)
@@ -347,7 +402,6 @@ class PromptPolicy(nn.Module):
                         action_idx = dist.sample()
                 
                 actions[key] = int(action_idx)
-                # FIXED: Proper tensor handling to avoid warning
                 if isinstance(action_idx, torch.Tensor):
                     log_probs.append(dist.log_prob(action_idx))
                 else:
@@ -358,7 +412,7 @@ class PromptPolicy(nn.Module):
 
 # Data Classes 
 @dataclass
-class EpisodeLog:
+class DocumentEpisodeLog:
     episode: int
     reward: float
     raw_reward: float  
@@ -366,113 +420,87 @@ class EpisodeLog:
     prompt: str
     response: str
     concept_bin: str
-    learning_style_bin: str
-    conversation_length: int
+    context_bin: str
+    terms_count: int
+    citations_count: int
     epsilon: float
-    concepts_count: int  # NEW: Track how many concepts were used
     
     def to_dict(self):
         return asdict(self)
 
-# Real-time logging function
-def save_episode_log(log: EpisodeLog, filename: str):
-    with open(filename, "a") as f:  # Use append mode
+def save_episode_log(log: DocumentEpisodeLog, filename: str):
+    with open(filename, "a") as f:
         f.write(json.dumps(log.to_dict()) + "\n")
 
-# Training with exploration and better grading
-def run_episode(policy: PromptPolicy,
+def run_episode(policy: DocumentPromptPolicy,
                 optimizer: torch.optim.Optimizer,
                 baseline: float,
-                concepts: List[Dict[str, str]],
-                learning_style: str,
-                conversation: List[str],
+                concept_bin: str,
+                context_bin: str,
+                terms: List[Dict[str, str]],
+                citations: List[str],
                 episode: int,
-                baseline_responses: Dict[str, str] = None) -> Tuple[float, EpisodeLog]:
+                baseline_responses: Dict[str, str] = None) -> Tuple[float, DocumentEpisodeLog]:
     policy.train()
     
-    # Calculate current exploration rate (epsilon decay)
     epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** episode))
     
-    # Assume last question/comment in conversation is the student's latest input
-    if conversation:
-        STUDENT_QUESTION = conversation[-1]
-    else:
-        STUDENT_QUESTION = "No previous questions."
-
-    # Bin the concepts and learning style dynamically
-    concept_bin = bin_concepts(concepts)
-    learning_style_bin = bin_learning_style(learning_style)
+    # Build state tensor
+    state_tensor = build_state_tensor(concept_bin, context_bin, len(terms), len(citations))
     
-    # State tensor from concept, learning style, and conversation
-    state_tensor = build_state_tensor(concept_bin, learning_style_bin, conversation)
-
     # Get logits from policy network
     logits = policy(state_tensor)
-
-    # FIXED: Sample actions with epsilon-greedy exploration and proper tensor handling
+    
+    # Sample actions
     actions = {}
     log_probs = []
     entropies = []
     
     for key, logit in zip(BLOCK_KEYS, logits):
-        # Use epsilon-greedy for exploration
         if random.random() < epsilon:
             action_idx = random.randint(0, len(BLOCK_OPTIONS[key]) - 1)
-            # Convert to tensor properly for log_prob calculation
             action_tensor = torch.tensor(action_idx, dtype=torch.long, device=DEVICE)
         else:
             dist = Categorical(logits=logit)
-            action_tensor = dist.sample()  # This is already a tensor
-            action_idx = action_tensor.item()  # Convert to Python int for storage
+            action_tensor = dist.sample()
+            action_idx = action_tensor.item()
         
-        actions[key] = action_idx  # Store as Python int
-        
-        # Create distribution for log_prob calculation
+        actions[key] = action_idx
         dist = Categorical(logits=logit)
-        log_probs.append(dist.log_prob(action_tensor))  # Use tensor directly
+        log_probs.append(dist.log_prob(action_tensor))
         entropies.append(dist.entropy())
     
-    # Assemble prompt with selected actions - now uses binned concept
-    prompt = assemble_prompt(actions, concept_bin, learning_style, STUDENT_QUESTION, conversation)
+    # Assemble prompt and get response
+    prompt = assemble_prompt(actions, concept_bin, context_bin, terms, citations)
+    response = get_study_guide_response(prompt)
     
-    # Get tutoring response from LLM
-    response = get_tutoring_response(prompt)
-    
-    # Get baseline response for comparison if enabled
+    # Get baseline for comparison
     baseline_response = None
     if USE_COMPARATIVE_GRADING:
         if baseline_responses is None:
             baseline_responses = {}
-        # Create cache key from all concept terms
-        concept_terms = [concept["term"] for concept in concepts]
-        cache_key = f"{'_'.join(concept_terms)}_{learning_style}"
+        cache_key = f"{concept_bin}_{context_bin}_{len(terms)}_{len(citations)}"
         if cache_key not in baseline_responses:
             baseline_responses[cache_key] = get_baseline_response(prompt)
         baseline_response = baseline_responses[cache_key]
     
-    # Use strict evaluation with baseline comparison
-    raw_reward = evaluate_response_strict(prompt, response, baseline_response)
-    reward = raw_reward  # The function already applies scaling and noise
+    # Evaluate with terms and citations
+    raw_reward = evaluate_response_strict(prompt, response, terms, citations, baseline_response)
+    reward = raw_reward
     
-    # Calculate advantage (how much better/worse than baseline)
+    # Update policy
     advantage = reward - baseline
-    
-    # Calculate loss with stronger entropy bonus
     policy_loss = -(advantage) * torch.stack(log_probs).sum()
     entropy_loss = -ENTROPY_LAMBDA * torch.stack(entropies).sum()
     total_loss = policy_loss + entropy_loss
     
-    # Update policy parameters
     optimizer.zero_grad()
     total_loss.backward()
-    
-    # Add gradient clipping to prevent exploding gradients
     torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)
-    
     optimizer.step()
     
-    # Create log entry with more tracking
-    log = EpisodeLog(
+    # Create log
+    log = DocumentEpisodeLog(
         episode=episode,
         reward=reward,
         raw_reward=raw_reward,
@@ -480,43 +508,51 @@ def run_episode(policy: PromptPolicy,
         prompt=prompt,
         response=response,
         concept_bin=concept_bin,
-        learning_style_bin=learning_style_bin,
-        conversation_length=len(conversation) if conversation else 0,
+        context_bin=context_bin,
+        terms_count=len(terms),
+        citations_count=len(citations),
         epsilon=epsilon,
-        concepts_count=len(concepts),  # NEW: Track concept count
     )
     
     return reward, log
 
-# Logging with raw rewards and exploration tracking
-def print_epoch_summary(episode: int, reward: float, recent_rewards: List[float], best_reward: float, epsilon: float, logs: List[EpisodeLog]):
+def print_epoch_summary(episode: int, reward: float, recent_rewards: List[float], best_reward: float, epsilon: float, logs: List[DocumentEpisodeLog]):
     avg_reward = sum(recent_rewards) / len(recent_rewards) if recent_rewards else 0
-    
-    # Calculate average raw reward (before scaling) for last few episodes
     recent_raw_rewards = [log.raw_reward for log in logs[-min(10, len(logs)):]]
     avg_raw_reward = sum(recent_raw_rewards) / len(recent_raw_rewards) if recent_raw_rewards else 0
     
     print(f"Episode {episode}/{N_EPISODES} | Reward: {reward:.2f} | Raw: {logs[-1].raw_reward:.2f} | "
           f"Avg: {avg_reward:.2f} | Raw Avg: {avg_raw_reward:.2f} | Best: {best_reward:.2f} | ε: {epsilon:.3f}")
 
-def train_policy(concepts: List[Dict[str, str]] = None, 
-                learning_style: str = "step by step with examples", 
-                conversation: List[str] = None,
-                filename: str = "training_logs.jsonl"):
+def train_document_policy(markdown_file_path: str, filename: str = "document_training_logs.jsonl"):
     torch.manual_seed(42)
     random.seed(42)
     
-    # Default concepts if none provided
-    if concepts is None:
-        concepts = [{
-            "term": "linear algebra",
-            "definition": "Linear algebra is the branch of mathematics concerning linear equations, linear functions, and their representations through matrices and vector spaces."
-        }]
+    # Read and process the markdown file
+    print("Reading and analyzing document...")
+    markdown_content = read_markdown_file(markdown_file_path)
+    if not markdown_content:
+        print("Error: Could not read markdown file!")
+        return None, []
     
-    if conversation is None:
-        conversation = []
+    # Bin the document
+    print("Binning document by subject and context...")
+    concept_bin = bin_document_concept(markdown_content)
+    context_bin = bin_document_context(markdown_content)
     
-    policy = PromptPolicy().to(DEVICE)
+    # Extract terms and citations
+    print("Extracting terms and citations...")
+    terms, citations = extract_terms_and_citations(markdown_content)
+    
+    print(f"Document Analysis Complete:")
+    print(f"- Subject: {concept_bin}")
+    print(f"- Context: {context_bin}")
+    print(f"- Terms extracted: {len(terms)}")
+    print(f"- Citations extracted: {len(citations)}")
+    print("="*60)
+    
+    # Initialize training
+    policy = DocumentPromptPolicy().to(DEVICE)
     optimizer = torch.optim.Adam(policy.parameters(), lr=LR)
     
     baseline = 0.0
@@ -524,17 +560,13 @@ def train_policy(concepts: List[Dict[str, str]] = None,
     recent_rewards = []
     best_reward = float('-inf')
     best_episode = 0
-    baseline_responses = {}  # Cache for baseline responses
+    baseline_responses = {}
     
-    # Display concept information
-    concept_terms = [concept["term"] for concept in concepts]
+    # Clear log file
+    if os.path.exists(filename):
+        os.remove(filename)
+    
     print(f"Starting training with {N_EPISODES} episodes...")
-    print(f"Concepts ({len(concepts)}): {', '.join(concept_terms)}")
-    print(f"Learning Style: {learning_style}")
-    print(f"Conversation length: {len(conversation)}")
-    print(f"Exploration: {EPSILON_START} -> {EPSILON_END}")
-    print(f"Reward scaling: {REWARD_SCALE_FACTOR}")
-    print(f"Entropy weight: {ENTROPY_LAMBDA}")
     print(f"Real-time logging to: {filename}")
     print("="*60)
     
@@ -543,77 +575,58 @@ def train_policy(concepts: List[Dict[str, str]] = None,
             policy=policy,
             optimizer=optimizer,
             baseline=baseline,
-            concepts=concepts,
-            learning_style=learning_style,
-            conversation=conversation,
+            concept_bin=concept_bin,
+            context_bin=context_bin,
+            terms=terms,
+            citations=citations,
             episode=episode,
             baseline_responses=baseline_responses
         )
         
-        # Update baseline with exponential moving average
         baseline = BASELINE_BETA * baseline + (1 - BASELINE_BETA) * reward
         
-        # Update tracking variables
         logs.append(log)
         recent_rewards.append(reward)
         if len(recent_rewards) > 10:
             recent_rewards.pop(0)
         
-        # Track best model
         if reward > best_reward:
             best_reward = reward
             best_episode = episode
         
-        # Save log immediately after each episode
         save_episode_log(log, filename)
-
-        # Track logs and save every now and then with better logging
+        
         if episode % LOG_INTERVAL == 0:
             print_epoch_summary(episode, reward, recent_rewards, best_reward, log.epsilon, logs)
     
-    print(f"\nTraining complete")
+    print(f"\nTraining complete!")
     print(f"Best reward: {best_reward:.2f} at episode {best_episode}")
     print(f"Final exploration rate: {logs[-1].epsilon:.3f}")
-    print(f"Real-time logs saved to: {filename}")
-
+    
     # Final evaluation
     print("\nFinal Evaluation:")
-    
-    # Bin the inputs for final evaluation
-    concept_bin = bin_concepts(concepts)
-    learning_style_bin = bin_learning_style(learning_style)
-    
-    print(f"Concepts binned to: {concept_bin}")
-    print(f"Learning style binned to: {learning_style_bin}")
-    
-    # Get the final student question
-    if conversation:
-        STUDENT_QUESTION = conversation[-1]
-    else:
-        STUDENT_QUESTION = "No previous questions."
+    print(f"Document binned to: {concept_bin} | {context_bin}")
     
     actions, _, _ = policy.get_actions(
-        build_state_tensor(concept_bin, learning_style_bin, conversation),
+        build_state_tensor(concept_bin, context_bin, len(terms), len(citations)),
         deterministic=True
     )
     
-    # Print best prompt configuration
     print("\nBest prompt configuration:")
     for key, idx in actions.items():
         print(f"{key}: {BLOCK_OPTIONS[key][idx]}")
     
-    # Generate example prompt with best configuration - now uses binned concept
-    best_prompt = assemble_prompt(actions, concept_bin, learning_style, STUDENT_QUESTION, conversation)
+    best_prompt = assemble_prompt(actions, concept_bin, context_bin, terms, citations)
     print("\nExample of best prompt template:")
-    print(best_prompt)
+    print(best_prompt[:500] + "..." if len(best_prompt) > 500 else best_prompt)
     
     return policy, logs
 
 def main():
-    # Default parameters with multiple concepts
-    markdown = ""
-    
-    train_policy(concepts, learning_style, conversation, filename="training_logs.jsonl")
+    # Test with a sample file - replace with actual file path
+    # Default Values
+    markdown_file = "samplefile.md"
+    train_document_policy(markdown_file, filename="document_training_logs.jsonl")
 
 if __name__ == "__main__":
     main()

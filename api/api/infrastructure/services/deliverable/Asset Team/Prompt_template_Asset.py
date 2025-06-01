@@ -12,4 +12,4 @@ Enhance the definition by including some of or all of the following:
    - Relevant terms that are related to the terms provided and topic
    - {example_instructions}
    - {analogy_style}
-   - {practice_question}”””
+   - {practice_question}"""
