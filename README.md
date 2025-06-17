@@ -1,6 +1,4 @@
-# Chelle-DataRes 2025
-
-Welcome, DataRes students!
+# Chelle-AI
 
 The goals of this project are two-fold. First, we want to optimize the process of extracting key educational terminology and citations from source materials, such as papers, blogs, and textbook chapters. Second, we want to improve the learning experience of communicating with an intelligent AI tutor.
 
